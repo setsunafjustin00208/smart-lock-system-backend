@@ -25,7 +25,7 @@ class Cors extends BaseConfig
      *  }
      */
     public array $default = [
-        'allowedOrigins' => ['http://localhost:3000'],
+        'allowedOrigins' => [],
         'allowedOriginsPatterns' => [],
         'supportsCredentials' => true,
         'allowedHeaders' => ['*'],
@@ -33,4 +33,18 @@ class Cors extends BaseConfig
         'allowedMethods' => ['GET', 'POST', 'PUT', 'DELETE', 'OPTIONS'],
         'maxAge' => 7200,
     ];
+
+    public function __construct()
+    {
+        parent::__construct();
+        
+        // Get allowed origins from environment
+        $allowedOrigins = $_ENV['CORS_ALLOWED_ORIGINS'] ?? getenv('CORS_ALLOWED_ORIGINS') ?? '*';
+        
+        if ($allowedOrigins === '*') {
+            $this->default['allowedOrigins'] = ['*'];
+        } else {
+            $this->default['allowedOrigins'] = array_map('trim', explode(',', $allowedOrigins));
+        }
+    }
 }
