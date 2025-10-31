@@ -26,6 +26,11 @@ class LockControlLib
         // Simulate hardware command without WebSocket
         $response = $this->simulateHardwareResponse($lock, $command, $params);
         
+        // Update database status if command was successful
+        if ($response['success'] && in_array($command, ['lock', 'unlock'])) {
+            $this->updateLockStatus($lockModel, $lock, $command, $response['hardware_response']);
+        }
+        
         // Log activity
         $this->logActivity($lockId, $command, $params);
         
@@ -76,6 +81,25 @@ class LockControlLib
                     'message' => 'Invalid command'
                 ];
         }
+    }
+
+    private function updateLockStatus($lockModel, $lock, $command, $hardwareResponse)
+    {
+        // Parse current status data
+        $currentStatus = json_decode($lock['status_data'], true);
+        
+        // Update status based on command
+        $newStatus = array_merge($currentStatus, [
+            'is_locked' => ($command === 'lock'),
+            'battery_level' => $hardwareResponse['battery_level'] ?? $currentStatus['battery_level'],
+            'last_activity' => $hardwareResponse['timestamp'] ?? date('c')
+        ]);
+        
+        // Update the database
+        $lockModel->update($lock['id'], [
+            'status_data' => json_encode($newStatus),
+            'is_online' => true
+        ]);
     }
 
     private function logActivity($lockId, $command, $params)

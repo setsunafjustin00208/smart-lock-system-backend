@@ -48,7 +48,7 @@ class LocksController extends BaseController
         $action = $input['action'] ?? $this->request->getPost('action');
         
         if (!in_array($action, ['lock', 'unlock', 'status'])) {
-            return $this->failValidationError('Invalid action');
+            return $this->fail('Invalid action', 400);
         }
 
         $user = $this->request->user;
