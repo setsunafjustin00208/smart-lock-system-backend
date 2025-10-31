@@ -20,11 +20,13 @@ class AuthController extends BaseController
             return $this->failValidationErrors($this->validator->getErrors());
         }
 
+        // Handle JSON input properly
+        $input = $this->request->getJSON(true);
+        $username = $input['username'] ?? $this->request->getPost('username');
+        $password = $input['password'] ?? $this->request->getPost('password');
+
         $userModel = new \App\Models\UserModel();
-        $user = $userModel->authenticateUser(
-            $this->request->getPost('username'),
-            $this->request->getPost('password')
-        );
+        $user = $userModel->authenticateUser($username, $password);
 
         if (!$user) {
             return $this->failUnauthorized('Invalid credentials');

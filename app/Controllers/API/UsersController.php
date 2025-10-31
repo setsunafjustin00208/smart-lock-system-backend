@@ -44,12 +44,19 @@ class UsersController extends BaseController
             return $this->failValidationErrors($this->validator->getErrors());
         }
 
+        // Handle JSON input properly
+        $input = $this->request->getJSON(true);
+        $username = $input['username'] ?? $this->request->getPost('username');
+        $email = $input['email'] ?? $this->request->getPost('email');
+        $password = $input['password'] ?? $this->request->getPost('password');
+        $roles = $input['roles'] ?? $this->request->getPost('roles') ?? ['user'];
+
         $userModel = new \App\Models\UserModel();
         $userId = $userModel->createUser([
-            'username' => $this->request->getPost('username'),
-            'email' => $this->request->getPost('email'),
-            'password' => $this->request->getPost('password'),
-            'roles' => $this->request->getPost('roles') ?? ['user']
+            'username' => $username,
+            'email' => $email,
+            'password' => $password,
+            'roles' => $roles
         ]);
 
         if ($userId) {

@@ -9,6 +9,14 @@ $routes->get('/', 'Home::index');
 
 // API Routes
 $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) {
+    // OPTIONS routes for CORS preflight
+    $routes->options('auth/login', function() { return ''; });
+    $routes->options('auth/logout', function() { return ''; });
+    $routes->options('auth/refresh', function() { return ''; });
+    $routes->options('users', function() { return ''; });
+    $routes->options('locks', function() { return ''; });
+    $routes->options('locks/(:any)', function() { return ''; });
+    
     // Auth routes (no auth required)
     $routes->post('auth/login', 'AuthController::login');
     $routes->post('auth/refresh', 'AuthController::refresh');

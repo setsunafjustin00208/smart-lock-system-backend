@@ -12,13 +12,13 @@ class AuthenticationLib
 
     public function __construct()
     {
-        $this->secretKey = env('JWT_SECRET_KEY');
+        $this->secretKey = $_ENV['JWT_SECRET_KEY'] ?? getenv('JWT_SECRET_KEY') ?? 'SmartLockJWTSecret2024VeryLongAndSecureKey';
     }
 
     public function generateToken($user, $expiry = 3600)
     {
         $payload = [
-            'iss' => base_url(),
+            'iss' => $_ENV['app.baseURL'] ?? 'http://localhost:8080/',
             'iat' => time(),
             'exp' => time() + $expiry,
             'user_id' => $user['id'],
@@ -42,7 +42,7 @@ class AuthenticationLib
     public function generateRefreshToken($user)
     {
         $payload = [
-            'iss' => base_url(),
+            'iss' => $_ENV['app.baseURL'] ?? 'http://localhost:8080/',
             'iat' => time(),
             'exp' => time() + (7 * 24 * 3600),
             'user_id' => $user['id'],

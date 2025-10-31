@@ -15,7 +15,7 @@ class CreateUsersTable extends Migration
             ],
             'uuid' => [
                 'type' => 'UUID',
-                'null' => false,
+                'null' => true,
                 'unique' => true,
             ],
             'username' => [

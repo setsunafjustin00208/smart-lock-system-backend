@@ -43,16 +43,18 @@ class LocksController extends BaseController
 
     public function control($id)
     {
-        $command = $this->request->getPost('command');
+        // Handle JSON input properly
+        $input = $this->request->getJSON(true);
+        $action = $input['action'] ?? $this->request->getPost('action');
         
-        if (!in_array($command, ['lock', 'unlock', 'status'])) {
-            return $this->failValidationError('Invalid command');
+        if (!in_array($action, ['lock', 'unlock', 'status'])) {
+            return $this->failValidationError('Invalid action');
         }
 
         $user = $this->request->user;
         $lockControlLib = new \App\Libraries\LockControlLib();
         
-        $result = $lockControlLib->sendCommand($id, $command, [
+        $result = $lockControlLib->sendCommand($id, $action, [
             'user_id' => $user['user_id']
         ]);
 
