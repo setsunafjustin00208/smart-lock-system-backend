@@ -171,6 +171,9 @@ database.default.port = 5432
 JWT_SECRET_KEY = SmartLockJWTSecret2024VeryLongAndSecureKey
 COMMAND_SECRET_KEY = ESP32CommandSignatureSecret2024ForHardware
 
+# CORS Configuration
+CORS_ALLOWED_ORIGINS = http://localhost:3000,http://localhost:5173,http://localhost:8081
+
 logger.threshold = 4
 EOF
     
@@ -182,6 +185,7 @@ EOF
     log "Seeding test data..."
     php spark db:seed UserSeeder
     php spark db:seed LockSeeder
+    php spark db:seed NotificationSeeder
     
     log "Backend setup completed"
 }
@@ -197,22 +201,64 @@ test_installation() {
     # Wait for server to start
     sleep 5
     
-    # Test API endpoint
-    RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
+    # Test API endpoints
+    log "Testing authentication..."
+    AUTH_RESPONSE=$(curl -s -X POST http://localhost:8080/api/auth/login \
         -H "Content-Type: application/json" \
         -d '{"username":"admin","password":"admin123"}' || echo "FAILED")
+    
+    if echo "$AUTH_RESPONSE" | grep -q "success"; then
+        log "✅ Authentication test successful!"
+        
+        # Extract token for further testing
+        TOKEN=$(echo "$AUTH_RESPONSE" | grep -o '"token":"[^"]*"' | cut -d'"' -f4)
+        
+        # Test protected endpoint
+        log "Testing protected endpoints..."
+        LOCKS_RESPONSE=$(curl -s -X GET http://localhost:8080/api/locks \
+            -H "Authorization: Bearer $TOKEN" || echo "FAILED")
+        
+        if echo "$LOCKS_RESPONSE" | grep -q "success"; then
+            log "✅ Protected endpoint test successful!"
+            
+            # Test notifications
+            log "Testing notifications..."
+            NOTIF_RESPONSE=$(curl -s -X GET http://localhost:8080/api/notifications \
+                -H "Authorization: Bearer $TOKEN" || echo "FAILED")
+            
+            if echo "$NOTIF_RESPONSE" | grep -q "success"; then
+                log "✅ Notifications test successful!"
+                
+                # Test lock status
+                log "Testing lock status..."
+                STATUS_RESPONSE=$(curl -s -X GET http://localhost:8080/api/locks/status \
+                    -H "Authorization: Bearer $TOKEN" || echo "FAILED")
+                
+                if echo "$STATUS_RESPONSE" | grep -q "success"; then
+                    log "✅ Lock status test successful!"
+                    TEST_SUCCESS=true
+                else
+                    warn "❌ Lock status test failed"
+                    TEST_SUCCESS=false
+                fi
+            else
+                warn "❌ Notifications test failed"
+                TEST_SUCCESS=false
+            fi
+        else
+            warn "❌ Protected endpoint test failed"
+            TEST_SUCCESS=false
+        fi
+    else
+        warn "❌ Authentication test failed"
+        echo "Response: $AUTH_RESPONSE"
+        TEST_SUCCESS=false
+    fi
     
     # Stop server
     kill $SERVER_PID 2>/dev/null || true
     
-    if echo "$RESPONSE" | grep -q "success"; then
-        log "✅ API test successful!"
-        return 0
-    else
-        warn "❌ API test failed"
-        echo "Response: $RESPONSE"
-        return 1
-    fi
+    return $TEST_SUCCESS
 }
 
 # Setup WSL auto-start
@@ -243,6 +289,8 @@ main() {
     echo "║  • PostgreSQL Database                                       ║"
     echo "║  • PHP Dependencies                                          ║"
     echo "║  • CodeIgniter 4 Backend                                     ║"
+    echo "║  • JWT Authentication System                                 ║"
+    echo "║  • Notification System                                       ║"
     echo "║  • Test Data & API Endpoints                                 ║"
     echo "╚══════════════════════════════════════════════════════════════╝"
     echo -e "${NC}"
@@ -282,17 +330,27 @@ main() {
         echo "║                                                              ║"
         echo "║  🧪 Test credentials:                                        ║"
         echo "║     admin / admin123                                         ║"
+        echo "║     manager / manager123                                     ║"
         echo "║     user / user123                                           ║"
+        echo "║     guest / guest123                                         ║"
         echo "║                                                              ║"
         echo "║  📡 API Base URL:                                            ║"
         echo "║     http://localhost:8080/api                                ║"
         echo "║                                                              ║"
-        echo "║  🔗 WebSocket URL:                                           ║"
-        echo "║     ws://localhost:3000                                      ║"
+        echo "║  🔔 Features Available:                                      ║"
+        echo "║     • JWT Authentication                                     ║"
+        echo "║     • User Management                                        ║"
+        echo "║     • Lock Control                                           ║"
+        echo "║     • Real-time Notifications                                ║"
+        echo "║     • Profile Management                                     ║"
+        echo "║     • Lock Status Monitoring                                 ║"
+        echo "║                                                              ║"
+        echo "║  📚 Documentation:                                           ║"
+        echo "║     backend/ai-assistant/docs/                               ║"
         echo "╚══════════════════════════════════════════════════════════════╝"
         echo -e "${NC}"
     else
-        error "Installation completed but API test failed. Please check the logs above."
+        error "Installation completed but API tests failed. Please check the logs above."
     fi
 }
 
