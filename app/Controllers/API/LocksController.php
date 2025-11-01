@@ -67,4 +67,30 @@ class LocksController extends BaseController
 
         return $this->failServerError($result['message']);
     }
+
+    public function batteryStatus()
+    {
+        $user = $this->request->user;
+        
+        $lockModel = new \App\Models\LockModel();
+        $locks = $lockModel->findAll();
+
+        $statusData = [];
+        foreach ($locks as $lock) {
+            $lockStatus = json_decode($lock['status_data'], true) ?? [];
+            $isOnline = $lock['is_online'] === 't' || $lock['is_online'] === true;
+            
+            $statusData[] = [
+                'lock_id' => $lock['id'],
+                'lock_name' => $lock['name'],
+                'status' => $isOnline ? 'online' : 'offline',
+                'last_updated' => $lock['updated_at']
+            ];
+        }
+
+        return $this->respond([
+            'status' => 'success',
+            'data' => $statusData
+        ]);
+    }
 }
