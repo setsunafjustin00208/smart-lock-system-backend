@@ -78,12 +78,16 @@ class UsersController extends BaseController
             return $this->failForbidden('Admin access required');
         }
 
-        $rules = [
-            'email' => 'permit_empty|valid_email',
-            'roles' => 'permit_empty'
-        ];
+        // Only validate if fields are provided and not empty
+        $rules = [];
+        if (isset($email) && $email !== '') {
+            $rules['email'] = 'valid_email';
+        }
+        if (isset($roles)) {
+            $rules['roles'] = 'permit_empty';
+        }
 
-        if (!$this->validate($rules)) {
+        if (!empty($rules) && !$this->validate($rules)) {
             return $this->failValidationErrors($this->validator->getErrors());
         }
 
@@ -100,7 +104,7 @@ class UsersController extends BaseController
         }
 
         $updateData = [];
-        if ($email) {
+        if ($email && $email !== '') {
             $updateData['email'] = $email;
         }
         
