@@ -64,7 +64,7 @@ class AuthController extends BaseController
         $refreshToken = $this->request->getPost('refresh_token');
         
         if (!$refreshToken) {
-            return $this->failValidationError('Refresh token required');
+            return $this->failValidationErrors(['refresh_token' => 'Refresh token required']);
         }
 
         $authLib = new \App\Libraries\AuthenticationLib();
@@ -105,7 +105,7 @@ class AuthController extends BaseController
             // Check if username is already taken
             $existingUser = $userModel->where('username', $username)->where('id !=', $user['user_id'])->first();
             if ($existingUser) {
-                return $this->failValidationError('Username already taken');
+                return $this->failValidationErrors(['username' => 'Username already taken']);
             }
             $updateData['username'] = $username;
         }
@@ -114,13 +114,13 @@ class AuthController extends BaseController
             // Check if email is already taken
             $existingUser = $userModel->where('email', $email)->where('id !=', $user['user_id'])->first();
             if ($existingUser) {
-                return $this->failValidationError('Email already taken');
+                return $this->failValidationErrors(['email' => 'Email already taken']);
             }
             $updateData['email'] = $email;
         }
 
         if (empty($updateData)) {
-            return $this->failValidationError('No valid fields to update');
+            return $this->failValidationErrors(['error' => 'No valid fields to update']);
         }
 
         if ($userModel->update($user['user_id'], $updateData)) {
@@ -162,7 +162,7 @@ class AuthController extends BaseController
         
         // Verify current password
         if (!password_verify($currentPassword, $authData['password_hash'])) {
-            return $this->failValidationError('Current password is incorrect');
+            return $this->failValidationErrors(['current_password' => 'Current password is incorrect']);
         }
 
         // Update password
