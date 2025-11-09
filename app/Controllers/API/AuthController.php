@@ -61,7 +61,8 @@ class AuthController extends BaseController
 
     public function refresh()
     {
-        $refreshToken = $this->request->getPost('refresh_token');
+        $input = $this->request->getJSON(true);
+        $refreshToken = $input['refresh_token'] ?? $this->request->getPost('refresh_token');
         
         if (!$refreshToken) {
             return $this->failValidationErrors(['refresh_token' => 'Refresh token required']);
