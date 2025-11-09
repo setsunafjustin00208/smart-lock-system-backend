@@ -111,7 +111,7 @@ class UsersController extends BaseController
         }
 
         if (empty($updateData)) {
-            return $this->failValidationError('No valid fields to update');
+            return $this->failValidationErrors(['error' => 'No valid fields to update']);
         }
 
         if ($userModel->update($id, $updateData)) {
@@ -134,7 +134,7 @@ class UsersController extends BaseController
 
         // Prevent self-deletion
         if ($user['user_id'] == $id) {
-            return $this->failValidationError('Cannot delete your own account');
+            return $this->failValidationErrors(['error' => 'Cannot delete your own account']);
         }
 
         $userModel = new \App\Models\UserModel();
