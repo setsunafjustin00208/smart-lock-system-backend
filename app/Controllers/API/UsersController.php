@@ -79,7 +79,7 @@ class UsersController extends BaseController
         }
 
         $rules = [
-            'email' => 'valid_email',
+            'email' => 'permit_empty|valid_email',
             'roles' => 'permit_empty'
         ];
 
