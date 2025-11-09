@@ -111,7 +111,11 @@ class UsersController extends BaseController
         }
 
         if (empty($updateData)) {
-            return $this->failValidationErrors(['error' => 'No valid fields to update']);
+            // No changes made, but that's okay
+            return $this->respond([
+                'status' => 'success',
+                'message' => 'User updated successfully'
+            ]);
         }
 
         if ($userModel->update($id, $updateData)) {
