@@ -35,7 +35,6 @@ class LockModel extends Model
         ];
 
         return $this->insert([
-            'uuid' => $this->generateUuid(),
             'name' => $lockData['name'],
             'hardware_id' => $lockData['hardware_id'],
             'config_data' => json_encode($configData),

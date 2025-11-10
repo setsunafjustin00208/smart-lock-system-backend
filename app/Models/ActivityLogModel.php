@@ -10,8 +10,10 @@ class ActivityLogModel extends Model
     protected $primaryKey = 'id';
     protected $useAutoIncrement = true;
     protected $returnType = 'array';
-    protected $allowedFields = ['user_id', 'lock_id', 'action', 'details'];
-    protected $useTimestamps = false;
+    protected $allowedFields = ['user_id', 'lock_id', 'action', 'details', 'created_at'];
+    protected $useTimestamps = true;
+    protected $createdField = 'created_at';
+    protected $updatedField = '';
 
     public function logActivity($userId, $lockId, $action, $details = [])
     {

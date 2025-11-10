@@ -43,12 +43,19 @@ class UserModel extends Model
         $user = $this->where('username', $username)->first();
         
         if (!$user) {
+            log_message('debug', 'User not found: ' . $username);
             return false;
         }
 
         $authData = json_decode($user['auth_data'], true);
         
+        if (!$authData) {
+            log_message('debug', 'Failed to decode auth_data for user: ' . $username);
+            return false;
+        }
+        
         if ($authData['locked_until'] && strtotime($authData['locked_until']) > time()) {
+            log_message('debug', 'Account locked for user: ' . $username);
             return false;
         }
 
@@ -64,6 +71,8 @@ class UserModel extends Model
             return $user;
         }
 
+        log_message('debug', 'Password verification failed for user: ' . $username);
+        
         $authData['failed_attempts']++;
         if ($authData['failed_attempts'] >= 5) {
             $authData['locked_until'] = date('Y-m-d H:i:s', strtotime('+30 minutes'));

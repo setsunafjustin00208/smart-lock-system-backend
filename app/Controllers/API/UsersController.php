@@ -44,12 +44,19 @@ class UsersController extends BaseController
             return $this->failValidationErrors($this->validator->getErrors());
         }
 
+        // Handle JSON input properly
+        $input = $this->request->getJSON(true);
+        $username = $input['username'] ?? $this->request->getPost('username');
+        $email = $input['email'] ?? $this->request->getPost('email');
+        $password = $input['password'] ?? $this->request->getPost('password');
+        $roles = $input['roles'] ?? $this->request->getPost('roles') ?? ['user'];
+
         $userModel = new \App\Models\UserModel();
         $userId = $userModel->createUser([
-            'username' => $this->request->getPost('username'),
-            'email' => $this->request->getPost('email'),
-            'password' => $this->request->getPost('password'),
-            'roles' => $this->request->getPost('roles') ?? ['user']
+            'username' => $username,
+            'email' => $email,
+            'password' => $password,
+            'roles' => $roles
         ]);
 
         if ($userId) {
@@ -61,5 +68,97 @@ class UsersController extends BaseController
         }
 
         return $this->failServerError('Failed to create user');
+    }
+
+    public function update($id)
+    {
+        $user = $this->request->user;
+        
+        if (!in_array('admin', $user['roles'])) {
+            return $this->failForbidden('Admin access required');
+        }
+
+        // Only validate if fields are provided and not empty
+        $rules = [];
+        if (isset($email) && $email !== '') {
+            $rules['email'] = 'valid_email';
+        }
+        if (isset($roles)) {
+            $rules['roles'] = 'permit_empty';
+        }
+
+        if (!empty($rules) && !$this->validate($rules)) {
+            return $this->failValidationErrors($this->validator->getErrors());
+        }
+
+        // Handle JSON input
+        $input = $this->request->getJSON(true);
+        $email = $input['email'] ?? $this->request->getPost('email');
+        $roles = $input['roles'] ?? $this->request->getPost('roles') ?? [];
+
+        $userModel = new \App\Models\UserModel();
+        $targetUser = $userModel->find($id);
+        
+        if (!$targetUser) {
+            return $this->failNotFound('User not found');
+        }
+
+        $updateData = [];
+        if ($email && $email !== '') {
+            $updateData['email'] = $email;
+        }
+        
+        if (!empty($roles)) {
+            $authData = json_decode($targetUser['auth_data'], true);
+            $authData['roles'] = $roles;
+            $updateData['auth_data'] = json_encode($authData);
+        }
+
+        if (empty($updateData)) {
+            // No changes made, but that's okay
+            return $this->respond([
+                'status' => 'success',
+                'message' => 'User updated successfully'
+            ]);
+        }
+
+        if ($userModel->update($id, $updateData)) {
+            return $this->respond([
+                'status' => 'success',
+                'message' => 'User updated successfully'
+            ]);
+        }
+
+        return $this->failServerError('Failed to update user');
+    }
+
+    public function delete($id)
+    {
+        $user = $this->request->user;
+        
+        if (!in_array('admin', $user['roles'])) {
+            return $this->failForbidden('Admin access required');
+        }
+
+        // Prevent self-deletion
+        if ($user['user_id'] == $id) {
+            return $this->failValidationErrors(['error' => 'Cannot delete your own account']);
+        }
+
+        $userModel = new \App\Models\UserModel();
+        $targetUser = $userModel->find($id);
+        
+        if (!$targetUser) {
+            return $this->failNotFound('User not found');
+        }
+
+        if ($userModel->delete($id)) {
+            return $this->respond([
+                'status' => 'success',
+                'message' => 'User deleted successfully'
+            ]);
+        }
+
+        return $this->failServerError('Failed to delete user');
     }
 }

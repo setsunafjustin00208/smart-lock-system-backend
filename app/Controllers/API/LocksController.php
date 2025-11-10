@@ -43,16 +43,18 @@ class LocksController extends BaseController
 
     public function control($id)
     {
-        $command = $this->request->getPost('command');
+        // Handle JSON input properly
+        $input = $this->request->getJSON(true);
+        $action = $input['action'] ?? $this->request->getPost('action');
         
-        if (!in_array($command, ['lock', 'unlock', 'status'])) {
-            return $this->failValidationError('Invalid command');
+        if (!in_array($action, ['lock', 'unlock', 'status'])) {
+            return $this->fail('Invalid action', 400);
         }
 
         $user = $this->request->user;
         $lockControlLib = new \App\Libraries\LockControlLib();
         
-        $result = $lockControlLib->sendCommand($id, $command, [
+        $result = $lockControlLib->sendCommand($id, $action, [
             'user_id' => $user['user_id']
         ]);
 
@@ -64,5 +66,31 @@ class LocksController extends BaseController
         }
 
         return $this->failServerError($result['message']);
+    }
+
+    public function batteryStatus()
+    {
+        $user = $this->request->user;
+        
+        $lockModel = new \App\Models\LockModel();
+        $locks = $lockModel->findAll();
+
+        $statusData = [];
+        foreach ($locks as $lock) {
+            $lockStatus = json_decode($lock['status_data'], true) ?? [];
+            $isOnline = $lock['is_online'] === 't' || $lock['is_online'] === true;
+            
+            $statusData[] = [
+                'lock_id' => $lock['id'],
+                'lock_name' => $lock['name'],
+                'status' => $isOnline ? 'online' : 'offline',
+                'last_updated' => $lock['updated_at']
+            ];
+        }
+
+        return $this->respond([
+            'status' => 'success',
+            'data' => $statusData
+        ]);
     }
 }
