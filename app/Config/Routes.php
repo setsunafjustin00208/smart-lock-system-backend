@@ -22,10 +22,15 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
     $routes->options('locks/(:any)', function() { return ''; });
     $routes->options('notifications', function() { return ''; });
     $routes->options('notifications/(:any)', function() { return ''; });
+    $routes->options('hardware/(:any)', function() { return ''; });
     
     // Auth routes (no auth required)
     $routes->post('auth/login', 'AuthController::login');
     $routes->post('auth/refresh', 'AuthController::refresh');
+    
+    // Hardware routes (no auth required for device communication)
+    $routes->post('hardware/heartbeat', 'HardwareController::heartbeat');
+    $routes->post('hardware/status', 'HardwareController::status');
     
     // Protected routes
     $routes->group('', ['filter' => 'auth'], function($routes) {
