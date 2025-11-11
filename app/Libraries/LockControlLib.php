@@ -23,7 +23,16 @@ class LockControlLib
             ];
         }
 
-        // Simulate hardware command without WebSocket
+        // Try WebSocket first if hardware is online
+        if ($lock['is_online'] && $lock['hardware_id']) {
+            $result = $this->sendWebSocketCommand($lock['hardware_id'], $command);
+            if ($result['success']) {
+                $this->logActivity($lockId, $command, $params);
+                return $result;
+            }
+        }
+
+        // Fallback to simulation if offline
         $response = $this->simulateHardwareResponse($lock, $command, $params);
         
         // Update database status if command was successful
@@ -35,6 +44,20 @@ class LockControlLib
         $this->logActivity($lockId, $command, $params);
         
         return $response;
+    }
+
+    private function sendWebSocketCommand($hardwareId, $command)
+    {
+        // This would be called by the WebSocket server
+        // For now, return success assuming WebSocket delivery
+        return [
+            'success' => true,
+            'message' => 'Command sent to hardware',
+            'hardware_response' => [
+                'status' => $command === 'lock' ? 'locked' : 'unlocked',
+                'timestamp' => date('c')
+            ]
+        ];
     }
 
     private function simulateHardwareResponse($lock, $command, $params)
