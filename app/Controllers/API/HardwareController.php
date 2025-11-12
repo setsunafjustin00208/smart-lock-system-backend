@@ -166,4 +166,4 @@ class HardwareController extends BaseController
         ]);
     }
 }
-}
+
