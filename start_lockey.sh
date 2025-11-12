@@ -9,8 +9,8 @@ WORKDIR=/home/lockey/Documents/lockey/backend
 # Start a new session detached
 /usr/bin/tmux new-session -d -s $SESSION -c $WORKDIR
 
-# Pane 1: PHP Server (listen on all interfaces)
-/usr/bin/tmux send-keys -t $SESSION "while true; do php spark serve --host=0.0.0.0 --port 8080; echo 'Server crashed. Restarting in 3s...'; sleep 3; done" C-m
+# Pane 1: PHP Built-in Server (listen on all interfaces)
+/usr/bin/tmux send-keys -t $SESSION "while true; do php -S 0.0.0.0:8080 -t public/; echo 'Server crashed. Restarting in 3s...'; sleep 3; done" C-m
 
 # Split horizontally → Pane 2
 /usr/bin/tmux split-window -h -t $SESSION -c $WORKDIR
