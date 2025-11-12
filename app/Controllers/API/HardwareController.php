@@ -7,6 +7,13 @@ use CodeIgniter\API\ResponseTrait;
 class HardwareController extends BaseController
 {
     use ResponseTrait;
+    
+    private $logger;
+
+    public function __construct()
+    {
+        $this->logger = new \App\Libraries\HardwareLogger();
+    }
 
     public function heartbeat()
     {
@@ -20,6 +27,9 @@ class HardwareController extends BaseController
         if (!$hardwareId) {
             return $this->fail('Hardware ID required');
         }
+
+        // Log heartbeat activity
+        $this->logger->logHeartbeat($hardwareId, 'online');
 
         // Update device online status
         $lockModel = new \App\Models\LockModel();
@@ -41,8 +51,20 @@ class HardwareController extends BaseController
             return $this->fail('Hardware ID required');
         }
 
-        // Update lock status
+        // Get previous state for logging
         $lockModel = new \App\Models\LockModel();
+        $currentLock = $lockModel->where('hardware_id', $hardwareId)->first();
+        $previousState = null;
+        
+        if ($currentLock) {
+            $currentStatus = json_decode($currentLock['status_data'], true);
+            $previousState = $currentStatus['is_locked'] ?? null;
+        }
+
+        // Log status update
+        $this->logger->logStatusUpdate($hardwareId, $isLocked, $previousState);
+
+        // Update lock status
         $statusData = json_encode(['is_locked' => $isLocked]);
         
         $lockModel->where('hardware_id', $hardwareId)->set([
@@ -75,8 +97,15 @@ class HardwareController extends BaseController
                                       ->first();
 
         if ($pendingCommand) {
-            // Mark command as sent
+            // Mark command as sent and log it
             $commandModel->update($pendingCommand['id'], ['status' => 'sent']);
+            
+            $this->logger->logCommand(
+                $hardwareId, 
+                $pendingCommand['command'], 
+                $pendingCommand['id'], 
+                'sent'
+            );
             
             return $this->respond([
                 'command' => $pendingCommand['command'],
@@ -93,13 +122,27 @@ class HardwareController extends BaseController
         $input = $this->request->getJSON(true);
         $commandId = $input['command_id'] ?? '';
         $status = $input['status'] ?? 'completed';
+        $hardwareId = $input['hardware_id'] ?? '';
         
         if (!$commandId) {
             return $this->fail('Command ID required');
         }
 
-        // Update command status
+        // Get command details for logging
         $commandModel = new \App\Models\CommandQueueModel();
+        $command = $commandModel->find($commandId);
+        
+        if ($command) {
+            // Log command completion
+            $this->logger->logCommand(
+                $command['hardware_id'], 
+                $command['command'], 
+                $commandId, 
+                $status
+            );
+        }
+
+        // Update command status
         $commandModel->update($commandId, [
             'status' => $status,
             'executed_at' => date('Y-m-d H:i:s'),
@@ -108,4 +151,19 @@ class HardwareController extends BaseController
 
         return $this->respond(['status' => 'confirmed']);
     }
+
+    public function getLogs()
+    {
+        $hardwareId = $this->request->getGet('hardware_id');
+        $limit = (int)($this->request->getGet('limit') ?? 100);
+        
+        $logs = $this->logger->getRecentActivity($hardwareId, $limit);
+        
+        return $this->respond([
+            'status' => 'success',
+            'data' => $logs,
+            'count' => count($logs)
+        ]);
+    }
+}
 }
