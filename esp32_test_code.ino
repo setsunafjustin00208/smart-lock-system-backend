@@ -44,9 +44,11 @@ bool wsConnected = false;
 // Timing variables
 unsigned long lastHeartbeat = 0;
 unsigned long lastStatusUpdate = 0;
+unsigned long lastCommandCheck = 0;
 unsigned long lastLEDUpdate = 0;
 const unsigned long heartbeatInterval = 30000; // 30 seconds
 const unsigned long statusInterval = 60000; // 1 minute
+const unsigned long commandInterval = 5000; // 5 seconds - check for commands
 
 // Lock state
 bool isLocked = true;
@@ -69,16 +71,18 @@ void setup() {
   }
   
   wifiConnected = true;
+  wsConnected = true; // HTTP API working, WebSocket disabled
   digitalWrite(LED_PIN, LOW); // LED ON when connected
   Serial.println();
   Serial.println("WiFi connected!");
   Serial.print("IP address: ");
   Serial.println(WiFi.localIP());
   
-  // Initialize WebSocket connection
-  webSocket.begin(wsServerURL, wsPort, "/");
-  webSocket.onEvent(webSocketEvent);
-  webSocket.setReconnectInterval(5000);
+  // WebSocket disabled - HTTP API working perfectly
+  // webSocket.begin(wsServerURL, wsPort);
+  // webSocket.onEvent(webSocketEvent);
+  // webSocket.setReconnectInterval(5000);
+  // webSocket.enableHeartbeat(15000, 3000, 2);
   
   // Send initial registration
   registerDevice();
@@ -93,8 +97,6 @@ void setup() {
 }
 
 void loop() {
-  webSocket.loop();
-  
   // Send heartbeat periodically
   if (millis() - lastHeartbeat > heartbeatInterval) {
     sendHeartbeat();
@@ -105,6 +107,12 @@ void loop() {
   if (millis() - lastStatusUpdate > statusInterval) {
     sendStatusUpdate();
     lastStatusUpdate = millis();
+  }
+  
+  // Check for commands periodically
+  if (millis() - lastCommandCheck > commandInterval) {
+    checkForCommands();
+    lastCommandCheck = millis();
   }
   
   // Update LED status
@@ -192,6 +200,77 @@ void sendStatusUpdate() {
     Serial.println("Status update sent: " + response);
   } else {
     Serial.println("Status update failed: " + String(httpCode));
+  }
+  
+  http.end();
+}
+
+void checkForCommands() {
+  HTTPClient http;
+  
+  #ifdef ESP8266
+    WiFiClient client;
+    http.begin(client, String(serverURL) + "/api/hardware/command");
+  #else
+    http.begin(String(serverURL) + "/api/hardware/command");
+  #endif
+  
+  http.addHeader("Content-Type", "application/json");
+  
+  String payload = "{\"hardware_id\":\"" + String(hardwareId) + "\"}";
+  int httpCode = http.POST(payload);
+  
+  if (httpCode == 200) {
+    String response = http.getString();
+    Serial.println("Command check: " + response);
+    
+    // Parse response for commands
+    if (response.indexOf("\"command\":\"lock\"") > -1) {
+      String commandId = extractCommandId(response);
+      lockDoor();
+      confirmCommand(commandId, "completed");
+    }
+    else if (response.indexOf("\"command\":\"unlock\"") > -1) {
+      String commandId = extractCommandId(response);
+      unlockDoor();
+      confirmCommand(commandId, "completed");
+    }
+    else if (response.indexOf("\"command\":\"status\"") > -1) {
+      String commandId = extractCommandId(response);
+      sendStatusUpdate();
+      confirmCommand(commandId, "completed");
+    }
+  }
+  
+  http.end();
+}
+
+String extractCommandId(String response) {
+  int start = response.indexOf("\"command_id\":") + 13;
+  int end = response.indexOf(",", start);
+  if (end == -1) end = response.indexOf("}", start);
+  return response.substring(start, end);
+}
+
+void confirmCommand(String commandId, String status) {
+  if (commandId.length() == 0) return;
+  
+  HTTPClient http;
+  
+  #ifdef ESP8266
+    WiFiClient client;
+    http.begin(client, String(serverURL) + "/api/hardware/confirm");
+  #else
+    http.begin(String(serverURL) + "/api/hardware/confirm");
+  #endif
+  
+  http.addHeader("Content-Type", "application/json");
+  
+  String payload = "{\"command_id\":" + commandId + ",\"status\":\"" + status + "\",\"hardware_id\":\"" + String(hardwareId) + "\"}";
+  int httpCode = http.POST(payload);
+  
+  if (httpCode == 200) {
+    Serial.println("Command confirmed: " + commandId);
   }
   
   http.end();
@@ -295,12 +374,14 @@ void runFullTest() {
   Serial.println("\n=== Running Full System Test ===");
   sendHeartbeat();
   sendStatusUpdate();
+  checkForCommands();
   
   Serial.println("\nTest commands: 'status', 'lock', 'unlock', 'test'");
-  Serial.println("LED Indicators:");
-  Serial.println("- Solid ON = All systems connected");
-  Serial.println("- Blinking = Connection issues");
-  Serial.println("- Quick flash = Heartbeat sent");
+  Serial.println("API-based system:");
+  Serial.println("- Heartbeat every 30 seconds");
+  Serial.println("- Status update every minute");
+  Serial.println("- Command polling every 5 seconds");
+  Serial.println("- LED: Solid ON = All systems working");
   Serial.println("- 3 flashes = Lock command");
   Serial.println("- 1 long flash = Unlock command");
   Serial.println("=====================================");

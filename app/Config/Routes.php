@@ -31,6 +31,8 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
     // Hardware routes (no auth required for device communication)
     $routes->post('hardware/heartbeat', 'HardwareController::heartbeat');
     $routes->post('hardware/status', 'HardwareController::statusUpdate');
+    $routes->post('hardware/command', 'HardwareController::getCommand');
+    $routes->post('hardware/confirm', 'HardwareController::confirmCommand');
     
     // Protected routes
     $routes->group('', ['filter' => 'auth'], function($routes) {

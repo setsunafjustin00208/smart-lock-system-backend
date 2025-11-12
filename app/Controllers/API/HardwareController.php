@@ -53,4 +53,59 @@ class HardwareController extends BaseController
 
         return $this->respond(['status' => 'updated']);
     }
+
+    public function getCommand()
+    {
+        // Accept both POST form data and JSON
+        $hardwareId = $this->request->getPost('hardware_id');
+        if (!$hardwareId) {
+            $input = $this->request->getJSON(true);
+            $hardwareId = $input['hardware_id'] ?? '';
+        }
+        
+        if (!$hardwareId) {
+            return $this->fail('Hardware ID required');
+        }
+
+        // Check for pending commands in database
+        $commandModel = new \App\Models\CommandQueueModel();
+        $pendingCommand = $commandModel->where('hardware_id', $hardwareId)
+                                      ->where('status', 'pending')
+                                      ->orderBy('created_at', 'ASC')
+                                      ->first();
+
+        if ($pendingCommand) {
+            // Mark command as sent
+            $commandModel->update($pendingCommand['id'], ['status' => 'sent']);
+            
+            return $this->respond([
+                'command' => $pendingCommand['command'],
+                'command_id' => $pendingCommand['id'],
+                'timestamp' => time()
+            ]);
+        }
+
+        return $this->respond(['command' => 'none']);
+    }
+
+    public function confirmCommand()
+    {
+        $input = $this->request->getJSON(true);
+        $commandId = $input['command_id'] ?? '';
+        $status = $input['status'] ?? 'completed';
+        
+        if (!$commandId) {
+            return $this->fail('Command ID required');
+        }
+
+        // Update command status
+        $commandModel = new \App\Models\CommandQueueModel();
+        $commandModel->update($commandId, [
+            'status' => $status,
+            'executed_at' => date('Y-m-d H:i:s'),
+            'response' => json_encode($input)
+        ]);
+
+        return $this->respond(['status' => 'confirmed']);
+    }
 }
