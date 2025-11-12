@@ -10,7 +10,12 @@ class HardwareController extends BaseController
 
     public function heartbeat()
     {
+        // Accept both POST form data and JSON
         $hardwareId = $this->request->getPost('hardware_id');
+        if (!$hardwareId) {
+            $input = $this->request->getJSON(true);
+            $hardwareId = $input['hardware_id'] ?? '';
+        }
         
         if (!$hardwareId) {
             return $this->fail('Hardware ID required');
