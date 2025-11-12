@@ -8,7 +8,7 @@ class HardwareController extends BaseController
 {
     use ResponseTrait;
     
-    private $logger;
+    protected $logger;
 
     public function __construct()
     {
