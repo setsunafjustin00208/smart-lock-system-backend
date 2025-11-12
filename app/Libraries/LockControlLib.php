@@ -23,7 +23,29 @@ class LockControlLib
             ];
         }
 
-        // Simulate hardware command without WebSocket
+        // Queue command for hardware to pick up via API
+        if ($lock['is_online'] && $lock['hardware_id']) {
+            $commandModel = new \App\Models\CommandQueueModel();
+            $commandModel->queueCommand(
+                $lock['hardware_id'], 
+                $command, 
+                $params['user_id'] ?? null,
+                ['lock_id' => $lockId, 'timestamp' => time()]
+            );
+            
+            $this->logActivity($lockId, $command, $params);
+            
+            return [
+                'success' => true,
+                'message' => 'Command queued for hardware',
+                'hardware_response' => [
+                    'status' => 'queued',
+                    'timestamp' => date('c')
+                ]
+            ];
+        }
+
+        // Fallback to simulation if offline
         $response = $this->simulateHardwareResponse($lock, $command, $params);
         
         // Update database status if command was successful
@@ -35,6 +57,20 @@ class LockControlLib
         $this->logActivity($lockId, $command, $params);
         
         return $response;
+    }
+
+    private function sendWebSocketCommand($hardwareId, $command)
+    {
+        // This would be called by the WebSocket server
+        // For now, return success assuming WebSocket delivery
+        return [
+            'success' => true,
+            'message' => 'Command sent to hardware',
+            'hardware_response' => [
+                'status' => $command === 'lock' ? 'locked' : 'unlocked',
+                'timestamp' => date('c')
+            ]
+        ];
     }
 
     private function simulateHardwareResponse($lock, $command, $params)

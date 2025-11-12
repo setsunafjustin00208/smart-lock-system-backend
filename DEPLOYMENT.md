@@ -119,7 +119,8 @@ nano ~/.cloudflared/config.yml
 
 **config.yml content:**
 ```yaml
-tunnel: <your-tunnel-id>
+tunnel: 
+
 credentials-file: /home/pi/.cloudflared/<your-tunnel-id>.json
 
 ingress:
@@ -132,7 +133,7 @@ ingress:
 
 In Cloudflare dashboard:
 1. Go to DNS settings
-2. Add CNAME record: `api` → `<tunnel-id>.cfargotunnel.com`
+2. Add CNAME record: `api` → `1eb3687a-e0eb-44f5-8767-c75e27aa0edf.cfargotunnel.com`
 
 ## Service Setup
 
