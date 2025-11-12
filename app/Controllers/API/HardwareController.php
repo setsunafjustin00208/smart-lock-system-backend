@@ -7,17 +7,11 @@ use CodeIgniter\API\ResponseTrait;
 class HardwareController extends BaseController
 {
     use ResponseTrait;
-    
-    protected $logger;
-
-    public function __construct()
-    {
-        parent::__construct();
-        $this->logger = new \App\Libraries\HardwareLogger();
-    }
 
     public function heartbeat()
     {
+        $logger = new \App\Libraries\HardwareLogger();
+        
         // Accept both POST form data and JSON
         $hardwareId = $this->request->getPost('hardware_id');
         if (!$hardwareId) {
@@ -30,7 +24,7 @@ class HardwareController extends BaseController
         }
 
         // Log heartbeat activity
-        $this->logger->logHeartbeat($hardwareId, 'online');
+        $logger->logHeartbeat($hardwareId, 'online');
 
         // Update device online status
         $lockModel = new \App\Models\LockModel();
@@ -44,6 +38,8 @@ class HardwareController extends BaseController
 
     public function statusUpdate()
     {
+        $logger = new \App\Libraries\HardwareLogger();
+        
         $input = $this->request->getJSON(true);
         $hardwareId = $input['hardware_id'] ?? '';
         $isLocked = $input['is_locked'] ?? true;
@@ -63,7 +59,7 @@ class HardwareController extends BaseController
         }
 
         // Log status update
-        $this->logger->logStatusUpdate($hardwareId, $isLocked, $previousState);
+        $logger->logStatusUpdate($hardwareId, $isLocked, $previousState);
 
         // Update lock status
         $statusData = json_encode(['is_locked' => $isLocked]);
@@ -101,7 +97,9 @@ class HardwareController extends BaseController
             // Mark command as sent and log it
             $commandModel->update($pendingCommand['id'], ['status' => 'sent']);
             
-            $this->logger->logCommand(
+            $logger = new \App\Libraries\HardwareLogger();
+            
+            $logger->logCommand(
                 $hardwareId, 
                 $pendingCommand['command'], 
                 $pendingCommand['id'], 
@@ -135,7 +133,8 @@ class HardwareController extends BaseController
         
         if ($command) {
             // Log command completion
-            $this->logger->logCommand(
+            $logger = new \App\Libraries\HardwareLogger();
+            $logger->logCommand(
                 $command['hardware_id'], 
                 $command['command'], 
                 $commandId, 
@@ -155,10 +154,12 @@ class HardwareController extends BaseController
 
     public function getLogs()
     {
+        $logger = new \App\Libraries\HardwareLogger();
+        
         $hardwareId = $this->request->getGet('hardware_id');
         $limit = (int)($this->request->getGet('limit') ?? 100);
         
-        $logs = $this->logger->getRecentActivity($hardwareId, $limit);
+        $logs = $logger->getRecentActivity($hardwareId, $limit);
         
         return $this->respond([
             'status' => 'success',
