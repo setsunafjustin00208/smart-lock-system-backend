@@ -12,6 +12,7 @@ class HardwareController extends BaseController
 
     public function __construct()
     {
+        parent::__construct();
         $this->logger = new \App\Libraries\HardwareLogger();
     }
 
