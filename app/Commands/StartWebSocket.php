@@ -25,7 +25,8 @@ class StartWebSocket extends BaseCommand
                     new \App\Libraries\SimpleWebSocketServer()
                 )
             ),
-            $port
+            $port,
+            '0.0.0.0'  // Bind to all interfaces
         );
 
         CLI::write("WebSocket server running on ws://localhost:{$port}", 'green');
