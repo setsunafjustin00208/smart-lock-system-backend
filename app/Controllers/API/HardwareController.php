@@ -10,8 +10,6 @@ class HardwareController extends BaseController
 
     public function heartbeat()
     {
-        $logger = new \App\Libraries\HardwareLogger();
-        
         // Accept both POST form data and JSON
         $hardwareId = $this->request->getPost('hardware_id');
         if (!$hardwareId) {
@@ -23,11 +21,38 @@ class HardwareController extends BaseController
             return $this->fail('Hardware ID required');
         }
 
-        // Log heartbeat activity
-        $logger->logHeartbeat($hardwareId, 'online');
-
-        // Update device online status
+        // Check if lock exists, if not auto-register it
         $lockModel = new \App\Models\LockModel();
+        $existingLock = $lockModel->where('hardware_id', $hardwareId)->first();
+        
+        if (!$existingLock) {
+            // Auto-register new ESP32 device
+            $lockModel->insert([
+                'name' => 'Auto-registered ' . $hardwareId,
+                'hardware_id' => $hardwareId,
+                'config_data' => json_encode([
+                    'auto_lock_delay' => 300,
+                    'notifications_enabled' => true,
+                    'access_schedule' => ['enabled' => false]
+                ]),
+                'status_data' => json_encode([
+                    'is_locked' => true,
+                    'last_activity' => date('c')
+                ]),
+                'is_online' => true,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+            
+            log_message('info', "Auto-registered new ESP32 device: {$hardwareId}");
+            
+            return $this->respond([
+                'status' => 'registered',
+                'message' => 'Device auto-registered successfully'
+            ]);
+        }
+
+        // Update existing device online status
         $lockModel->where('hardware_id', $hardwareId)->set([
             'is_online' => true,
             'updated_at' => date('Y-m-d H:i:s')
@@ -38,8 +63,6 @@ class HardwareController extends BaseController
 
     public function statusUpdate()
     {
-        $logger = new \App\Libraries\HardwareLogger();
-        
         $input = $this->request->getJSON(true);
         $hardwareId = $input['hardware_id'] ?? '';
         $isLocked = $input['is_locked'] ?? true;
@@ -48,20 +71,8 @@ class HardwareController extends BaseController
             return $this->fail('Hardware ID required');
         }
 
-        // Get previous state for logging
-        $lockModel = new \App\Models\LockModel();
-        $currentLock = $lockModel->where('hardware_id', $hardwareId)->first();
-        $previousState = null;
-        
-        if ($currentLock) {
-            $currentStatus = json_decode($currentLock['status_data'], true);
-            $previousState = $currentStatus['is_locked'] ?? null;
-        }
-
-        // Log status update
-        $logger->logStatusUpdate($hardwareId, $isLocked, $previousState);
-
         // Update lock status
+        $lockModel = new \App\Models\LockModel();
         $statusData = json_encode(['is_locked' => $isLocked]);
         
         $lockModel->where('hardware_id', $hardwareId)->set([
@@ -87,24 +98,13 @@ class HardwareController extends BaseController
         }
 
         // Check for pending commands in database
-        $commandModel = new \App\Models\CommandQueueModel();
-        $pendingCommand = $commandModel->where('hardware_id', $hardwareId)
-                                      ->where('status', 'pending')
-                                      ->orderBy('created_at', 'ASC')
-                                      ->first();
+        $db = \Config\Database::connect();
+        $query = $db->query("SELECT * FROM command_queue WHERE hardware_id = ? AND status = 'pending' ORDER BY created_at ASC LIMIT 1", [$hardwareId]);
+        $pendingCommand = $query->getRowArray();
 
         if ($pendingCommand) {
-            // Mark command as sent and log it
-            $commandModel->update($pendingCommand['id'], ['status' => 'sent']);
-            
-            $logger = new \App\Libraries\HardwareLogger();
-            
-            $logger->logCommand(
-                $hardwareId, 
-                $pendingCommand['command'], 
-                $pendingCommand['id'], 
-                'sent'
-            );
+            // Mark command as sent
+            $db->query("UPDATE command_queue SET status = 'sent', updated_at = NOW() WHERE id = ?", [$pendingCommand['id']]);
             
             return $this->respond([
                 'command' => $pendingCommand['command'],
@@ -121,32 +121,17 @@ class HardwareController extends BaseController
         $input = $this->request->getJSON(true);
         $commandId = $input['command_id'] ?? '';
         $status = $input['status'] ?? 'completed';
-        $hardwareId = $input['hardware_id'] ?? '';
         
         if (!$commandId) {
             return $this->fail('Command ID required');
         }
 
-        // Get command details for logging
-        $commandModel = new \App\Models\CommandQueueModel();
-        $command = $commandModel->find($commandId);
-        
-        if ($command) {
-            // Log command completion
-            $logger = new \App\Libraries\HardwareLogger();
-            $logger->logCommand(
-                $command['hardware_id'], 
-                $command['command'], 
-                $commandId, 
-                $status
-            );
-        }
-
         // Update command status
-        $commandModel->update($commandId, [
-            'status' => $status,
-            'executed_at' => date('Y-m-d H:i:s'),
-            'response' => json_encode($input)
+        $db = \Config\Database::connect();
+        $db->query("UPDATE command_queue SET status = ?, executed_at = NOW(), response = ? WHERE id = ?", [
+            $status,
+            json_encode($input),
+            $commandId
         ]);
 
         return $this->respond(['status' => 'confirmed']);
@@ -154,12 +139,17 @@ class HardwareController extends BaseController
 
     public function getLogs()
     {
-        $logger = new \App\Libraries\HardwareLogger();
-        
         $hardwareId = $this->request->getGet('hardware_id');
         $limit = (int)($this->request->getGet('limit') ?? 100);
         
-        $logs = $logger->getRecentActivity($hardwareId, $limit);
+        if (!$hardwareId) {
+            return $this->fail('Hardware ID required');
+        }
+        
+        // Get recent activity logs for the hardware
+        $db = \Config\Database::connect();
+        $query = $db->query("SELECT * FROM activity_logs WHERE lock_id IN (SELECT id FROM locks WHERE hardware_id = ?) ORDER BY created_at DESC LIMIT ?", [$hardwareId, $limit]);
+        $logs = $query->getResultArray();
         
         return $this->respond([
             'status' => 'success',
@@ -168,4 +158,3 @@ class HardwareController extends BaseController
         ]);
     }
 }
-
