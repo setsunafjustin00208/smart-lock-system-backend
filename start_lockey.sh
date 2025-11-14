@@ -19,7 +19,7 @@ WORKDIR=/home/lockey/Documents/lockey/backend
 # Split vertically from pane 0 → Pane 3: ngrok
 /usr/bin/tmux select-pane -t 0
 /usr/bin/tmux split-window -v -t $SESSION -c $WORKDIR
-/usr/bin/tmux send-keys -t $SESSION "while true; do ngrok http 8080 --url=lockey.ngrok.io; echo 'ngrok stopped. Restarting in 3s...'; sleep 3; done" C-m
+/usr/bin/tmux send-keys -t $SESSION "while true; do ngrok http 8080 --domain=lockey.ngrok.io; echo 'ngrok stopped. Restarting in 3s...'; sleep 3; done" C-m
 
 # Split vertically from pane 1 → Pane 4: Hardware Monitor
 /usr/bin/tmux select-pane -t 1
