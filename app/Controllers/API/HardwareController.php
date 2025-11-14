@@ -21,8 +21,38 @@ class HardwareController extends BaseController
             return $this->fail('Hardware ID required');
         }
 
-        // Update device online status
+        // Check if lock exists, if not auto-register it
         $lockModel = new \App\Models\LockModel();
+        $existingLock = $lockModel->where('hardware_id', $hardwareId)->first();
+        
+        if (!$existingLock) {
+            // Auto-register new ESP32 device
+            $lockModel->insert([
+                'name' => 'Auto-registered ' . $hardwareId,
+                'hardware_id' => $hardwareId,
+                'config_data' => json_encode([
+                    'auto_lock_delay' => 300,
+                    'notifications_enabled' => true,
+                    'access_schedule' => ['enabled' => false]
+                ]),
+                'status_data' => json_encode([
+                    'is_locked' => true,
+                    'last_activity' => date('c')
+                ]),
+                'is_online' => true,
+                'created_at' => date('Y-m-d H:i:s'),
+                'updated_at' => date('Y-m-d H:i:s')
+            ]);
+            
+            log_message('info', "Auto-registered new ESP32 device: {$hardwareId}");
+            
+            return $this->respond([
+                'status' => 'registered',
+                'message' => 'Device auto-registered successfully'
+            ]);
+        }
+
+        // Update existing device online status
         $lockModel->where('hardware_id', $hardwareId)->set([
             'is_online' => true,
             'updated_at' => date('Y-m-d H:i:s')
