@@ -131,10 +131,11 @@ class LockControlLib
             'last_activity' => $hardwareResponse['timestamp'] ?? date('c')
         ]);
         
-        // Update the database
+        // Update the database with updated_at timestamp
         $lockModel->update($lock['id'], [
             'status_data' => json_encode($newStatus),
-            'is_online' => true
+            'is_online' => true,
+            'updated_at' => date('Y-m-d H:i:s')
         ]);
     }
 
