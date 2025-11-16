@@ -14,11 +14,8 @@ class LocksController extends BaseController
         $user = $this->request->user;
         $lockModel = new \App\Models\LockModel();
         
-        if (in_array('admin', $user['roles'])) {
-            $locks = $lockModel->findAll();
-        } else {
-            $locks = $lockModel->getLocksForUser($user['user_id']);
-        }
+        // Show all locks to all authenticated users
+        $locks = $lockModel->findAll();
 
         return $this->respond([
             'status' => 'success',
@@ -39,6 +36,38 @@ class LocksController extends BaseController
             'status' => 'success',
             'data' => $lock
         ]);
+    }
+
+    public function update($id)
+    {
+        $json = $this->request->getJSON(true);
+        
+        if (!isset($json['name']) || empty(trim($json['name']))) {
+            return $this->fail('Lock name is required', 400);
+        }
+        
+        $lockModel = new \App\Models\LockModel();
+        $lock = $lockModel->find($id);
+        
+        if (!$lock) {
+            return $this->failNotFound('Lock not found');
+        }
+        
+        $updateData = [
+            'name' => trim($json['name']),
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        
+        if ($lockModel->update($id, $updateData)) {
+            $updatedLock = $lockModel->find($id);
+            return $this->respond([
+                'status' => 'success',
+                'message' => 'Lock name updated successfully',
+                'data' => $updatedLock
+            ]);
+        }
+        
+        return $this->failServerError('Failed to update lock name');
     }
 
     public function control($id)
