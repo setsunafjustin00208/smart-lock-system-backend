@@ -115,7 +115,7 @@ void sendHeartbeat() {
     if (response.indexOf("\"force_sync\":true") > -1) {
       Serial.println("FORCED SYNC requested in heartbeat!");
       String syncCommandId = extractSyncCommandId(response);
-      sendLog("HEARTBEAT", "Forced sync requested via heartbeat", "info");
+      sendLog("HEARTBEAT", "Forced sync requested via heartbeat", "info", false);
       forceSyncWithDatabase();
       if (syncCommandId.length() > 0) {
         confirmCommand(syncCommandId, "completed");
@@ -178,28 +178,28 @@ void checkForCommands() {
     if (response.indexOf("unlock") > -1 && response.indexOf("command") > -1) {
       String commandId = extractCommandId(response);
       Serial.println("UNLOCK command received!");
-      sendLog("COMMAND", "Unlock command received (ID: " + commandId + ")", "info");
+      sendLog("COMMAND", "Unlock command received (ID: " + commandId + ")", "info", false);
       unlockDoor();
       confirmCommand(commandId, "completed");
     }
     else if (response.indexOf("lock") > -1 && response.indexOf("command") > -1 && response.indexOf("unlock") == -1) {
       String commandId = extractCommandId(response);
       Serial.println("LOCK command received!");
-      sendLog("COMMAND", "Lock command received (ID: " + commandId + ")", "info");
+      sendLog("COMMAND", "Lock command received (ID: " + commandId + ")", "info", false);
       lockDoor();
       confirmCommand(commandId, "completed");
     }
     else if (response.indexOf("status") > -1 && response.indexOf("command") > -1) {
       String commandId = extractCommandId(response);
       Serial.println("STATUS command received!");
-      sendLog("COMMAND", "Status command received (ID: " + commandId + ")", "info");
+      sendLog("COMMAND", "Status command received (ID: " + commandId + ")", "info", false);
       sendStatusUpdate();
       confirmCommand(commandId, "completed");
     }
     else if (response.indexOf("sync") > -1 && response.indexOf("command") > -1) {
       String commandId = extractCommandId(response);
       Serial.println("FORCED SYNC command received!");
-      sendLog("COMMAND", "Forced sync command received (ID: " + commandId + ")", "info");
+      sendLog("COMMAND", "Forced sync command received (ID: " + commandId + ")", "info", false);
       forceSyncWithDatabase();
       confirmCommand(commandId, "completed");
     }
@@ -314,7 +314,7 @@ void printStatus() {
 
 void forceSyncWithDatabase() {
   Serial.println("FORCED sync with database initiated...");
-  sendLog("FORCE_SYNC", "Forced synchronization started", "info");
+  sendLog("FORCE_SYNC", "Forced synchronization started", "info", false);
   
   // Call the regular sync function
   syncWithDatabaseState();
@@ -358,7 +358,7 @@ void syncWithDatabaseState() {
         previousLockState = isLocked;
         stateSynced = true;
         
-        sendLog("STATE_SYNC", "Hardware state synced with database: " + String(isLocked ? "LOCKED" : "UNLOCKED"), "info");
+        sendLog("STATE_SYNC", "Hardware state synced with database: " + String(isLocked ? "LOCKED" : "UNLOCKED"), "info", false);
       }
     }
   } else {
@@ -367,14 +367,14 @@ void syncWithDatabaseState() {
     previousLockState = true;
     stateSynced = false;
     
-    sendLog("STATE_SYNC", "Failed to sync with database, using default LOCKED state", "warning");
+    sendLog("STATE_SYNC", "Failed to sync with database, using default LOCKED state", "warning", false);
   }
   
   http.end();
   updatePhysicalLockState();
 }
 
-void sendLog(String type, String message, String level, bool stateChanged = false) {
+void sendLog(String type, String message, String level, bool stateChanged) {
   HTTPClient http;
   
   http.begin(String(serverURL) + "/api/hardware/log");
