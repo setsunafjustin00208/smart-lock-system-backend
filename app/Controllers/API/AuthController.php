@@ -28,6 +28,14 @@ class AuthController extends BaseController
         $userModel = new \App\Models\UserModel();
         $user = $userModel->authenticateUser($username, $password);
 
+        if ($user === 'ACCOUNT_LOCKED') {
+            return $this->respond([
+                'status' => 'error',
+                'message' => 'Account is locked due to too many failed login attempts. Please try again in 30 minutes.',
+                'error_code' => 'ACCOUNT_LOCKED'
+            ], 423);
+        }
+
         if (!$user) {
             return $this->failUnauthorized('Invalid credentials');
         }
@@ -61,181 +69,160 @@ class AuthController extends BaseController
 
     public function refresh()
     {
-        $input = $this->request->getJSON(true);
-        $refreshToken = $input['refresh_token'] ?? $this->request->getPost('refresh_token');
+        $authLib = new \App\Libraries\AuthenticationLib();
+        $refreshToken = $this->request->getHeaderLine('Authorization');
         
         if (!$refreshToken) {
-            return $this->failValidationErrors(['refresh_token' => 'Refresh token required']);
+            return $this->failUnauthorized('Refresh token required');
         }
 
-        $authLib = new \App\Libraries\AuthenticationLib();
-        $newToken = $authLib->refreshToken($refreshToken);
-        
-        if (!$newToken) {
+        $refreshToken = str_replace('Bearer ', '', $refreshToken);
+        $user = $authLib->validateRefreshToken($refreshToken);
+
+        if (!$user) {
             return $this->failUnauthorized('Invalid refresh token');
         }
 
+        $newToken = $authLib->generateToken($user);
+        $newRefreshToken = $authLib->generateRefreshToken($user);
+
         return $this->respond([
             'status' => 'success',
-            'data' => ['token' => $newToken]
+            'data' => [
+                'token' => $newToken,
+                'refresh_token' => $newRefreshToken
+            ]
+        ]);
+    }
+
+    public function profile()
+    {
+        $user = $this->request->user;
+        
+        return $this->respond([
+            'status' => 'success',
+            'data' => [
+                'id' => $user['user_id'],
+                'username' => $user['username'],
+                'email' => $user['email'] ?? '',
+                'roles' => $user['roles']
+            ]
         ]);
     }
 
     public function updateProfile()
     {
         $user = $this->request->user;
-        
-        $rules = [
-            'username' => 'min_length[3]|max_length[50]',
-            'email' => 'valid_email'
-        ];
-
-        if (!$this->validate($rules)) {
-            return $this->failValidationErrors($this->validator->getErrors());
-        }
-
-        // Handle JSON input
         $input = $this->request->getJSON(true);
-        $username = $input['username'] ?? $this->request->getPost('username');
-        $email = $input['email'] ?? $this->request->getPost('email');
 
         $userModel = new \App\Models\UserModel();
+        $userData = $userModel->find($user['user_id']);
+
+        if (!$userData) {
+            return $this->failNotFound('User not found');
+        }
+
         $updateData = [];
-
-        if ($username && $username !== $user['username']) {
-            // Check if username is already taken
-            $existingUser = $userModel->where('username', $username)->where('id !=', $user['user_id'])->first();
-            if ($existingUser) {
-                return $this->failValidationErrors(['username' => 'Username already taken']);
-            }
-            $updateData['username'] = $username;
+        if (isset($input['email'])) {
+            $updateData['email'] = $input['email'];
         }
 
-        if ($email) {
-            // Check if email is already taken
-            $existingUser = $userModel->where('email', $email)->where('id !=', $user['user_id'])->first();
-            if ($existingUser) {
-                return $this->failValidationErrors(['email' => 'Email already taken']);
-            }
-            $updateData['email'] = $email;
+        if (!empty($updateData)) {
+            $userModel->update($user['user_id'], $updateData);
         }
 
-        if (empty($updateData)) {
-            return $this->failValidationErrors(['error' => 'No valid fields to update']);
-        }
-
-        if ($userModel->update($user['user_id'], $updateData)) {
-            return $this->respond([
-                'status' => 'success',
-                'message' => 'Profile updated successfully'
-            ]);
-        }
-
-        return $this->failServerError('Failed to update profile');
+        return $this->respond([
+            'status' => 'success',
+            'message' => 'Profile updated successfully'
+        ]);
     }
 
     public function changePassword()
     {
         $user = $this->request->user;
-        
+        $input = $this->request->getJSON(true);
+
         $rules = [
-            'currentPassword' => 'required',
-            'newPassword' => 'required|min_length[6]'
+            'current_password' => 'required',
+            'new_password' => 'required|min_length[6]'
         ];
 
         if (!$this->validate($rules)) {
             return $this->failValidationErrors($this->validator->getErrors());
         }
 
-        // Handle JSON input
-        $input = $this->request->getJSON(true);
-        $currentPassword = $input['currentPassword'] ?? $this->request->getPost('currentPassword');
-        $newPassword = $input['newPassword'] ?? $this->request->getPost('newPassword');
-
         $userModel = new \App\Models\UserModel();
-        $currentUser = $userModel->find($user['user_id']);
-        
-        if (!$currentUser) {
+        $userData = $userModel->find($user['user_id']);
+
+        if (!$userData) {
             return $this->failNotFound('User not found');
         }
 
-        $authData = json_decode($currentUser['auth_data'], true);
-        
-        // Verify current password
-        if (!password_verify($currentPassword, $authData['password_hash'])) {
-            return $this->failValidationErrors(['current_password' => 'Current password is incorrect']);
+        $authData = json_decode($userData['auth_data'], true);
+
+        if (!password_verify($input['current_password'], $authData['password_hash'])) {
+            return $this->fail('Current password is incorrect', 400);
         }
 
-        // Update password
-        $authData['password_hash'] = password_hash($newPassword, PASSWORD_ARGON2ID);
-        
-        if ($userModel->update($user['user_id'], ['auth_data' => json_encode($authData)])) {
-            return $this->respond([
-                'status' => 'success',
-                'message' => 'Password changed successfully'
-            ]);
-        }
+        $authData['password_hash'] = password_hash($input['new_password'], PASSWORD_ARGON2ID);
 
-        return $this->failServerError('Failed to change password');
+        $userModel->update($user['user_id'], [
+            'auth_data' => json_encode($authData)
+        ]);
+
+        return $this->respond([
+            'status' => 'success',
+            'message' => 'Password changed successfully'
+        ]);
     }
 
     public function getNotificationSettings()
     {
         $user = $this->request->user;
-        
         $userModel = new \App\Models\UserModel();
-        $currentUser = $userModel->find($user['user_id']);
-        
-        if (!$currentUser) {
+        $userData = $userModel->find($user['user_id']);
+
+        if (!$userData) {
             return $this->failNotFound('User not found');
         }
 
-        $profileData = json_decode($currentUser['profile_data'], true) ?? [];
-        $notificationSettings = $profileData['notification_settings'] ?? [
-            'email' => true,
-            'push' => true,
-            'sms' => false,
-            'lockAlerts' => true,
-            'batteryAlerts' => true
+        $profileData = json_decode($userData['profile_data'], true) ?? [];
+        $notifications = $profileData['notifications'] ?? [
+            'email_enabled' => true,
+            'push_enabled' => true,
+            'lock_status' => true,
+            'status_alerts' => true,
+            'system_alerts' => true
         ];
 
         return $this->respond([
             'status' => 'success',
-            'data' => $notificationSettings
+            'data' => $notifications
         ]);
     }
 
     public function updateNotificationSettings()
     {
         $user = $this->request->user;
-        
-        // Handle JSON input
         $input = $this->request->getJSON(true);
-        $settings = $input ?? $this->request->getPost();
 
         $userModel = new \App\Models\UserModel();
-        $currentUser = $userModel->find($user['user_id']);
-        
-        if (!$currentUser) {
+        $userData = $userModel->find($user['user_id']);
+
+        if (!$userData) {
             return $this->failNotFound('User not found');
         }
 
-        $profileData = json_decode($currentUser['profile_data'], true) ?? [];
-        $profileData['notification_settings'] = [
-            'email' => $settings['email'] ?? false,
-            'push' => $settings['push'] ?? false,
-            'sms' => $settings['sms'] ?? false,
-            'lockAlerts' => $settings['lockAlerts'] ?? false,
-            'batteryAlerts' => $settings['batteryAlerts'] ?? false
-        ];
+        $profileData = json_decode($userData['profile_data'], true) ?? [];
+        $profileData['notifications'] = $input;
 
-        if ($userModel->update($user['user_id'], ['profile_data' => json_encode($profileData)])) {
-            return $this->respond([
-                'status' => 'success',
-                'message' => 'Notification settings updated'
-            ]);
-        }
+        $userModel->update($user['user_id'], [
+            'profile_data' => json_encode($profileData)
+        ]);
 
-        return $this->failServerError('Failed to update notification settings');
+        return $this->respond([
+            'status' => 'success',
+            'message' => 'Notification settings updated successfully'
+        ]);
     }
 }

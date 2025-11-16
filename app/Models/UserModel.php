@@ -56,7 +56,7 @@ class UserModel extends Model
         
         if ($authData['locked_until'] && strtotime($authData['locked_until']) > time()) {
             log_message('debug', 'Account locked for user: ' . $username);
-            return false;
+            return 'ACCOUNT_LOCKED';
         }
 
         if (password_verify($password, $authData['password_hash'])) {

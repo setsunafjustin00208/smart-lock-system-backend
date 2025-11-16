@@ -36,6 +36,7 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
     $routes->get('hardware/logs', 'HardwareController::getLogs');
     $routes->post('hardware/log', 'HardwareController::log');
     $routes->post('hardware/sync', 'HardwareController::forceSync');
+    $routes->post('hardware/lock-state', 'HardwareController::getLockState');
     
     // Protected routes
     $routes->group('', ['filter' => 'auth'], function($routes) {

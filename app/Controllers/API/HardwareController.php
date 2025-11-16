@@ -301,4 +301,41 @@ class HardwareController extends BaseController
         
         return $response;
     }
+
+    public function getLockState()
+    {
+        $input = $this->request->getJSON(true);
+        $hardwareId = $input['hardware_id'] ?? '';
+        
+        if (!$hardwareId) {
+            return $this->fail('Hardware ID required');
+        }
+
+        $lockModel = new \App\Models\LockModel();
+        $lock = $lockModel->where('hardware_id', $hardwareId)->first();
+        
+        if (!$lock) {
+            return $this->respond([
+                'status' => 'success',
+                'data' => [
+                    'is_locked' => true, // Default to locked for security
+                    'message' => 'Lock not found, using default LOCKED state'
+                ]
+            ]);
+        }
+
+        // Parse status data
+        $statusData = json_decode($lock['status_data'], true);
+        $isLocked = $statusData['is_locked'] ?? true;
+        
+        return $this->respond([
+            'status' => 'success',
+            'data' => [
+                'is_locked' => $isLocked,
+                'lock_id' => $lock['id'],
+                'lock_name' => $lock['name'],
+                'message' => 'Lock state retrieved successfully'
+            ]
+        ]);
+    }
 }
