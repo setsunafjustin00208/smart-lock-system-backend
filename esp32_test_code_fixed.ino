@@ -21,6 +21,11 @@ const char* hardwareId = "ESP32_TEST_001";
 // Connection status
 bool wifiConnected = false;
 bool backendConnected = false;
+bool stateSynced = false;
+
+// Lock state
+bool isLocked = true;
+bool previousLockState = true;
 
 // Timing variables
 unsigned long lastHeartbeat = 0;
@@ -314,6 +319,88 @@ void forceSyncWithDatabase() {
   
   // Send confirmation log
   sendLog("FORCE_SYNC", "Forced synchronization completed - State: " + String(isLocked ? "LOCKED" : "UNLOCKED"), "info");
+}
+
+void syncWithDatabaseState() {
+  Serial.println("Syncing with database state...");
+  
+  HTTPClient http;
+  
+  // Get current lock status from database
+  http.begin(String(serverURL) + "/api/locks");
+  http.addHeader("Authorization", "Bearer demo_token");
+  
+  int httpCode = http.GET();
+  
+  if (httpCode == 200) {
+    String response = http.getString();
+    Serial.println("Database response: " + response);
+    
+    // Parse response to find our lock's current state
+    if (response.indexOf("\"hardware_id\":\"" + String(hardwareId) + "\"") > -1) {
+      int lockStart = response.indexOf("\"hardware_id\":\"" + String(hardwareId) + "\"");
+      int statusStart = response.indexOf("\"is_locked\":", lockStart);
+      
+      if (statusStart > -1) {
+        int valueStart = statusStart + 12;
+        String lockValue = response.substring(valueStart, valueStart + 5);
+        
+        if (lockValue.indexOf("true") > -1) {
+          isLocked = true;
+          Serial.println("Synced: Lock is LOCKED");
+        } else if (lockValue.indexOf("false") > -1) {
+          isLocked = false;
+          Serial.println("Synced: Lock is UNLOCKED");
+        }
+        
+        previousLockState = isLocked;
+        stateSynced = true;
+        
+        sendLog("STATE_SYNC", "Hardware state synced with database: " + String(isLocked ? "LOCKED" : "UNLOCKED"), "info");
+      }
+    }
+  } else {
+    Serial.println("Failed to sync with database: " + String(httpCode));
+    isLocked = true;
+    previousLockState = true;
+    stateSynced = false;
+    
+    sendLog("STATE_SYNC", "Failed to sync with database, using default LOCKED state", "warning");
+  }
+  
+  http.end();
+  updatePhysicalLockState();
+}
+
+void sendLog(String type, String message, String level, bool stateChanged = false) {
+  HTTPClient http;
+  
+  http.begin(String(serverURL) + "/api/hardware/log");
+  http.addHeader("Content-Type", "application/json");
+  
+  String payload = "{";
+  payload += "\"hardware_id\":\"" + String(hardwareId) + "\",";
+  payload += "\"type\":\"" + type + "\",";
+  payload += "\"message\":\"" + message + "\",";
+  payload += "\"level\":\"" + level + "\",";
+  payload += "\"timestamp\":" + String(millis()) + ",";
+  payload += "\"state_changed\":" + (stateChanged ? "true" : "false") + ",";
+  payload += "\"current_state\":\"" + String(isLocked ? "LOCKED" : "UNLOCKED") + "\"";
+  payload += "}";
+  
+  int httpCode = http.POST(payload);
+  
+  if (httpCode != 200 && type != "LOG_ERROR") {
+    Serial.println("Log send failed: " + String(httpCode));
+  }
+  
+  http.end();
+}
+
+void updatePhysicalLockState() {
+  // Update physical lock to match database state
+  digitalWrite(LOCK_PIN, isLocked ? HIGH : LOW);
+  Serial.println("Physical lock state updated: " + String(isLocked ? "LOCKED" : "UNLOCKED"));
 }
 
 void runFullTest() {
