@@ -6,14 +6,15 @@
 #include <ESP8266WiFi.h>
 #include <ESP8266HTTPClient.h>
 #include <WiFiClient.h>
+#include "credentials.h"
 
-// WiFi credentials
-const char* ssid = "GlobeAtHome_5B8F1_2.4";
-const char* password = "42D54DFF";
+// WiFi credentials from config
+const char* ssid = WIFI_SSID;
+const char* password = WIFI_PASSWORD;
 
-// Server configuration
-const char* serverURL = "http://192.168.254.175:8080";
-const char* hardwareId = "NODEMCU_TEST_001";
+// Server configuration from config
+const char* serverURL = SERVER_URL;
+const char* hardwareId = NODEMCU_HARDWARE_ID;
 
 #define LED_PIN 2
 
@@ -27,9 +28,10 @@ unsigned long lastHeartbeat = 0;
 unsigned long lastStatusUpdate = 0;
 unsigned long lastCommandCheck = 0;
 unsigned long lastLEDUpdate = 0;
-const unsigned long heartbeatInterval = 30000; // 30 seconds
-const unsigned long statusInterval = 3000; // 3 seconds
-const unsigned long commandInterval = 1000; // 1 second
+// Timing variables from config
+const unsigned long heartbeatInterval = HEARTBEAT_INTERVAL;
+const unsigned long statusInterval = STATUS_INTERVAL;
+const unsigned long commandInterval = COMMAND_INTERVAL;
 
 // Lock state
 bool isLocked = true;

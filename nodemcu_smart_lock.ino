@@ -1,11 +1,11 @@
 /*
- * ESP32 Test Code for Smart Lock Backend Integration
- * API-based command system using credentials configuration
+ * NodeMCU (ESP8266) Smart Lock Backend Integration
+ * API-based command system with database state sync and logging
  */
 
-#include <WiFi.h>
-#include <HTTPClient.h>
-#include <WiFiClientSecure.h>
+#include <ESP8266WiFi.h>
+#include <ESP8266HTTPClient.h>
+#include <WiFiClient.h>
 #include "credentials.h"
 
 // WiFi credentials from config
@@ -14,10 +14,7 @@ const char* password = WIFI_PASSWORD;
 
 // Server configuration from config
 const char* serverURL = SERVER_URL;
-const char* hardwareId = ESP32_HARDWARE_ID;
-
-#define LED_PIN 2
-#define LOCK_PIN 4  // GPIO 4 for lock control (relay/servo)
+const char* hardwareId = NODEMCU_HARDWARE_ID;
 
 // Connection status
 bool wifiConnected = false;
@@ -28,18 +25,14 @@ bool stateSynced = false;
 bool isLocked = true;
 bool previousLockState = true;
 
-// Timing variables
+// Timing variables from config
 unsigned long lastHeartbeat = 0;
 unsigned long lastStatusUpdate = 0;
 unsigned long lastCommandCheck = 0;
 unsigned long lastLEDUpdate = 0;
-// Timing variables from config
 const unsigned long heartbeatInterval = HEARTBEAT_INTERVAL;
 const unsigned long statusInterval = STATUS_INTERVAL;
 const unsigned long commandInterval = COMMAND_INTERVAL;
-
-// Lock state
-bool isLocked = true;
 
 void setup() {
   Serial.begin(115200);
@@ -47,7 +40,7 @@ void setup() {
   pinMode(LED_PIN, OUTPUT);
   pinMode(LOCK_PIN, OUTPUT);
   digitalWrite(LED_PIN, HIGH); // LED OFF initially
-  digitalWrite(LOCK_PIN, HIGH); // Lock ENGAGED initially (locked)
+  digitalWrite(LOCK_PIN, HIGH); // Lock ENGAGED initially
   
   WiFi.begin(ssid, password);
   Serial.print("Connecting to WiFi");
@@ -69,9 +62,10 @@ void setup() {
   Serial.println("Force syncing with database...");
   forceSyncWithDatabase();
   
-  Serial.println("ESP32 Smart Lock initialized!");
-  Serial.println("Using ngrok tunnel: " + String(serverURL));
-  Serial.println("API-based system - polling for commands every 1 second");
+  Serial.println("NodeMCU Smart Lock initialized!");
+  Serial.println("Server: " + String(serverURL));
+  Serial.println("Hardware ID: " + String(hardwareId));
+  Serial.println("API-based system with logging");
 }
 
 void loop() {
@@ -97,12 +91,12 @@ void loop() {
 }
 
 void sendHeartbeat() {
-  WiFiClientSecure client;
-  client.setInsecure(); // Skip SSL verification for ngrok
+  WiFiClient client;
   HTTPClient http;
   
   http.begin(client, String(serverURL) + "/api/hardware/heartbeat");
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(HTTP_TIMEOUT);
   
   String payload = "{\"hardware_id\":\"" + String(hardwareId) + "\"}";
   int httpCode = http.POST(payload);
@@ -122,7 +116,6 @@ void sendHeartbeat() {
       }
     }
     
-    // Check if device was auto-registered
     if (response.indexOf("registered") > -1) {
       Serial.println("Device auto-registered successfully!");
     } else {
@@ -132,48 +125,60 @@ void sendHeartbeat() {
     digitalWrite(LED_PIN, HIGH);
     delay(100);
     digitalWrite(LED_PIN, LOW);
+    
+    sendLog("HEARTBEAT", "Device online and responding", "info");
   } else {
     backendConnected = false;
     Serial.println("Heartbeat failed: " + String(httpCode));
+    sendLog("HEARTBEAT", "Heartbeat failed with code: " + String(httpCode), "error");
   }
   
   http.end();
 }
 
 void sendStatusUpdate() {
-  WiFiClientSecure client;
-  client.setInsecure(); // Skip SSL verification for ngrok
+  WiFiClient client;
   HTTPClient http;
   
   http.begin(client, String(serverURL) + "/api/hardware/status");
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(HTTP_TIMEOUT);
   
   String payload = "{\"hardware_id\":\"" + String(hardwareId) + "\",\"is_locked\":" + (isLocked ? "true" : "false") + "}";
   int httpCode = http.POST(payload);
   
   if (httpCode == 200) {
     Serial.println("Status updated");
+    
+    bool stateChanged = (isLocked != previousLockState);
+    String logMessage = "Status update: " + String(isLocked ? "LOCKED" : "UNLOCKED");
+    if (stateChanged) {
+      logMessage += " (state changed from " + String(previousLockState ? "LOCKED" : "UNLOCKED") + ")";
+    }
+    
+    sendLog("STATUS_UPDATE", logMessage, stateChanged ? "info" : "debug", stateChanged);
+    previousLockState = isLocked;
   } else {
     Serial.println("Status update failed: " + String(httpCode));
+    sendLog("STATUS_UPDATE", "Status update failed with code: " + String(httpCode), "error");
   }
   
   http.end();
 }
 
 void checkForCommands() {
-  WiFiClientSecure client;
-  client.setInsecure(); // Skip SSL verification for ngrok
+  WiFiClient client;
   HTTPClient http;
   
   http.begin(client, String(serverURL) + "/api/hardware/command");
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(HTTP_TIMEOUT);
   
   String payload = "{\"hardware_id\":\"" + String(hardwareId) + "\"}";
   int httpCode = http.POST(payload);
   
   if (httpCode == 200) {
     String response = http.getString();
-    Serial.println("Command response: " + response);
     
     if (response.indexOf("unlock") > -1 && response.indexOf("command") > -1) {
       String commandId = extractCommandId(response);
@@ -203,8 +208,6 @@ void checkForCommands() {
       forceSyncWithDatabase();
       confirmCommand(commandId, "completed");
     }
-  } else if (httpCode != 200) {
-    Serial.println("Command check failed: " + String(httpCode));
   }
   
   http.end();
@@ -227,27 +230,29 @@ String extractSyncCommandId(String response) {
 void confirmCommand(String commandId, String status) {
   if (commandId.length() == 0) return;
   
-  WiFiClientSecure client;
-  client.setInsecure(); // Skip SSL verification for ngrok
+  WiFiClient client;
   HTTPClient http;
   
   http.begin(client, String(serverURL) + "/api/hardware/confirm");
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(HTTP_TIMEOUT);
   
   String payload = "{\"command_id\":" + commandId + ",\"status\":\"" + status + "\"}";
   int httpCode = http.POST(payload);
   
   if (httpCode == 200) {
     Serial.println("Command confirmed: " + commandId);
+    sendLog("COMMAND", "Command confirmed (ID: " + commandId + ", Status: " + status + ")", "info");
+  } else {
+    sendLog("COMMAND", "Command confirmation failed (ID: " + commandId + ", Code: " + String(httpCode) + ")", "error");
   }
   
   http.end();
 }
 
 void lockDoor() {
-  digitalWrite(LOCK_PIN, HIGH); // Engage lock (HIGH = locked)
   isLocked = true;
-  Serial.println("Door LOCKED");
+  Serial.println("🔒 Door LOCKED");
   
   for(int i = 0; i < 3; i++) {
     digitalWrite(LED_PIN, HIGH);
@@ -256,24 +261,32 @@ void lockDoor() {
     delay(100);
   }
   
+  updatePhysicalLockState();
   sendStatusUpdate();
+  sendLog("ACTION", "Door locked successfully", "info");
 }
 
 void unlockDoor() {
-  digitalWrite(LOCK_PIN, LOW); // Disengage lock (LOW = unlocked)
   isLocked = false;
-  Serial.println("Door UNLOCKED");
+  Serial.println("🔓 Door UNLOCKED");
   
   digitalWrite(LED_PIN, HIGH);
   delay(500);
   digitalWrite(LED_PIN, LOW);
   
+  updatePhysicalLockState();
   sendStatusUpdate();
+  sendLog("ACTION", "Door unlocked successfully", "info");
+}
+
+void updatePhysicalLockState() {
+  digitalWrite(LOCK_PIN, isLocked ? HIGH : LOW);
+  Serial.println("Physical lock state updated: " + String(isLocked ? "LOCKED" : "UNLOCKED"));
 }
 
 void updateStatusLED() {
   if (millis() - lastLEDUpdate > 2000) {
-    if (wifiConnected && backendConnected) {
+    if (wifiConnected && backendConnected && stateSynced) {
       digitalWrite(LED_PIN, LOW); // LED ON = all good
     } else {
       digitalWrite(LED_PIN, !digitalRead(LED_PIN)); // Blink = issues
@@ -282,55 +295,24 @@ void updateStatusLED() {
   }
 }
 
-void handleSerialCommands() {
-  if (Serial.available()) {
-    String command = Serial.readString();
-    command.trim();
-    
-    if (command == "lock") {
-      lockDoor();
-    } else if (command == "unlock") {
-      unlockDoor();
-    } else if (command == "status") {
-      printStatus();
-    } else if (command == "test") {
-      runFullTest();
-    } else if (command == "sync") {
-      forceSyncWithDatabase();
-    }
-  }
-}
-
-void printStatus() {
-  Serial.println("\n=== Device Status ===");
-  Serial.println("Hardware ID: " + String(hardwareId));
-  Serial.println("WiFi: " + String(wifiConnected ? "Connected" : "Disconnected"));
-  Serial.println("Backend: " + String(backendConnected ? "Connected" : "Disconnected"));
-  Serial.println("IP Address: " + WiFi.localIP().toString());
-  Serial.println("Lock Status: " + String(isLocked ? "LOCKED" : "UNLOCKED"));
-  Serial.println("Server URL: " + String(serverURL));
-  Serial.println("====================");
-}
-
 void forceSyncWithDatabase() {
   Serial.println("FORCED sync with database initiated...");
   sendLog("FORCE_SYNC", "Forced synchronization started", "info");
   
-  // Call the regular sync function
   syncWithDatabaseState();
   
-  // Send confirmation log
   sendLog("FORCE_SYNC", "Forced synchronization completed - State: " + String(isLocked ? "LOCKED" : "UNLOCKED"), "info");
 }
 
 void syncWithDatabaseState() {
   Serial.println("Syncing with database state...");
   
+  WiFiClient client;
   HTTPClient http;
   
-  // Get current lock status from database
-  http.begin(String(serverURL) + "/api/locks");
+  http.begin(client, String(serverURL) + "/api/locks");
   http.addHeader("Authorization", "Bearer demo_token");
+  http.setTimeout(HTTP_TIMEOUT);
   
   int httpCode = http.GET();
   
@@ -338,7 +320,6 @@ void syncWithDatabaseState() {
     String response = http.getString();
     Serial.println("Database response: " + response);
     
-    // Parse response to find our lock's current state
     if (response.indexOf("\"hardware_id\":\"" + String(hardwareId) + "\"") > -1) {
       int lockStart = response.indexOf("\"hardware_id\":\"" + String(hardwareId) + "\"");
       int statusStart = response.indexOf("\"is_locked\":", lockStart);
@@ -375,10 +356,12 @@ void syncWithDatabaseState() {
 }
 
 void sendLog(String type, String message, String level, bool stateChanged = false) {
+  WiFiClient client;
   HTTPClient http;
   
-  http.begin(String(serverURL) + "/api/hardware/log");
+  http.begin(client, String(serverURL) + "/api/hardware/log");
   http.addHeader("Content-Type", "application/json");
+  http.setTimeout(HTTP_TIMEOUT);
   
   String payload = "{";
   payload += "\"hardware_id\":\"" + String(hardwareId) + "\",";
@@ -399,10 +382,37 @@ void sendLog(String type, String message, String level, bool stateChanged = fals
   http.end();
 }
 
-void updatePhysicalLockState() {
-  // Update physical lock to match database state
-  digitalWrite(LOCK_PIN, isLocked ? HIGH : LOW);
-  Serial.println("Physical lock state updated: " + String(isLocked ? "LOCKED" : "UNLOCKED"));
+void handleSerialCommands() {
+  if (Serial.available()) {
+    String command = Serial.readString();
+    command.trim();
+    
+    if (command == "lock") {
+      lockDoor();
+      sendLog("MANUAL", "Manual lock command via serial", "info");
+    } else if (command == "unlock") {
+      unlockDoor();
+      sendLog("MANUAL", "Manual unlock command via serial", "info");
+    } else if (command == "status") {
+      printStatus();
+    } else if (command == "test") {
+      runFullTest();
+    } else if (command == "sync") {
+      forceSyncWithDatabase();
+    }
+  }
+}
+
+void printStatus() {
+  Serial.println("\n=== Device Status ===");
+  Serial.println("Hardware ID: " + String(hardwareId));
+  Serial.println("WiFi: " + String(wifiConnected ? "✓ Connected" : "✗ Disconnected"));
+  Serial.println("Backend: " + String(backendConnected ? "✓ Connected" : "✗ Disconnected"));
+  Serial.println("State Synced: " + String(stateSynced ? "✓ Yes" : "✗ No"));
+  Serial.println("IP Address: " + WiFi.localIP().toString());
+  Serial.println("Lock Status: " + String(isLocked ? "🔒 LOCKED" : "🔓 UNLOCKED"));
+  Serial.println("Server URL: " + String(serverURL));
+  Serial.println("====================");
 }
 
 void runFullTest() {
@@ -411,7 +421,9 @@ void runFullTest() {
   sendStatusUpdate();
   checkForCommands();
   
-  Serial.println("\nAPI-based system working with ngrok!");
+  Serial.println("\nAPI-based system with logging working!");
   Serial.println("Commands: 'status', 'lock', 'unlock', 'test', 'sync'");
   Serial.println("=====================================");
+  
+  sendLog("TEST", "Full system test completed", "info");
 }
