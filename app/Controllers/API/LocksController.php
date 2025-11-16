@@ -41,6 +41,38 @@ class LocksController extends BaseController
         ]);
     }
 
+    public function update($id)
+    {
+        $json = $this->request->getJSON(true);
+        
+        if (!isset($json['name']) || empty(trim($json['name']))) {
+            return $this->fail('Lock name is required', 400);
+        }
+        
+        $lockModel = new \App\Models\LockModel();
+        $lock = $lockModel->find($id);
+        
+        if (!$lock) {
+            return $this->failNotFound('Lock not found');
+        }
+        
+        $updateData = [
+            'name' => trim($json['name']),
+            'updated_at' => date('Y-m-d H:i:s')
+        ];
+        
+        if ($lockModel->update($id, $updateData)) {
+            $updatedLock = $lockModel->find($id);
+            return $this->respond([
+                'status' => 'success',
+                'message' => 'Lock name updated successfully',
+                'data' => $updatedLock
+            ]);
+        }
+        
+        return $this->failServerError('Failed to update lock name');
+    }
+
     public function control($id)
     {
         // Handle JSON input properly
