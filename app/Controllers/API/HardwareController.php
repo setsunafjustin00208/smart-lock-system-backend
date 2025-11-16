@@ -58,7 +58,7 @@ class HardwareController extends BaseController
             'updated_at' => date('Y-m-d H:i:s')
         ])->update();
 
-        return $this->respond(['status' => 'online']);
+        return $this->respond($this->checkSyncCommand($hardwareId));
     }
 
     public function statusUpdate()
@@ -202,6 +202,47 @@ class HardwareController extends BaseController
         return $this->respond(['status' => 'logged']);
     }
 
+    public function forceSync()
+    {
+        $input = $this->request->getJSON(true);
+        $hardwareId = $input['hardware_id'] ?? '';
+        
+        if (!$hardwareId) {
+            return $this->fail('Hardware ID required');
+        }
+
+        // Get current lock state from database
+        $lockModel = new \App\Models\LockModel();
+        $lock = $lockModel->where('hardware_id', $hardwareId)->first();
+        
+        if (!$lock) {
+            return $this->fail('Lock not found');
+        }
+
+        // Parse current database state
+        $statusData = json_decode($lock['status_data'], true);
+        $isLocked = $statusData['is_locked'] ?? true;
+        
+        // Queue sync command for hardware
+        $commandModel = new \App\Models\CommandQueueModel();
+        $commandModel->queueCommand(
+            $hardwareId,
+            'sync',
+            null,
+            [
+                'target_state' => $isLocked ? 'LOCKED' : 'UNLOCKED',
+                'force_sync' => true,
+                'timestamp' => time()
+            ]
+        );
+
+        return $this->respond([
+            'status' => 'sync_queued',
+            'target_state' => $isLocked ? 'LOCKED' : 'UNLOCKED',
+            'message' => 'Forced sync command queued for hardware'
+        ]);
+    }
+
     private function generateFriendlyName($hardwareId)
     {
         // Extract meaningful parts from hardware ID
@@ -241,5 +282,23 @@ class HardwareController extends BaseController
         $cleanName = preg_replace('/\s+/', ' ', trim($cleanName));
         
         return $cleanName . ' Lock';
+    }
+
+    private function checkSyncCommand($hardwareId)
+    {
+        // Check if there's a pending sync command
+        $db = \Config\Database::connect();
+        $syncCommand = $db->query("SELECT id FROM command_queue WHERE hardware_id = ? AND command = 'sync' AND status = 'pending' LIMIT 1", [$hardwareId])->getRowArray();
+        
+        $response = ['status' => 'online'];
+        
+        if ($syncCommand) {
+            $response['force_sync'] = true;
+            $response['sync_command_id'] = $syncCommand['id'];
+            // Mark sync command as sent
+            $db->query("UPDATE command_queue SET status = 'sent' WHERE id = ?", [$syncCommand['id']]);
+        }
+        
+        return $response;
     }
 }
