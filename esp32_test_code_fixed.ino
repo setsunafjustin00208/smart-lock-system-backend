@@ -38,8 +38,8 @@ const unsigned long heartbeatInterval = HEARTBEAT_INTERVAL;
 const unsigned long statusInterval = STATUS_INTERVAL;
 const unsigned long commandInterval = COMMAND_INTERVAL;
 
-// Lock state
-bool isLocked = true;
+// Function declarations
+void sendLog(String type, String message, String level, bool stateChanged = false);
 
 void setup() {
   Serial.begin(115200);
@@ -386,7 +386,9 @@ void sendLog(String type, String message, String level, bool stateChanged = fals
   payload += "\"message\":\"" + message + "\",";
   payload += "\"level\":\"" + level + "\",";
   payload += "\"timestamp\":" + String(millis()) + ",";
-  payload += "\"state_changed\":" + (stateChanged ? "true" : "false") + ",";
+  payload += "\"state_changed\":";
+  payload += stateChanged ? "true" : "false";
+  payload += ",";
   payload += "\"current_state\":\"" + String(isLocked ? "LOCKED" : "UNLOCKED") + "\"";
   payload += "}";
   
