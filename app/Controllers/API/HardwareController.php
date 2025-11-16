@@ -157,7 +157,7 @@ class HardwareController extends BaseController
             'count' => count($logs)
         ]);
     }
-}
+
     public function log()
     {
         $input = $this->request->getJSON(true);
