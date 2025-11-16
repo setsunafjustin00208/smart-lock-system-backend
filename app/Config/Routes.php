@@ -34,6 +34,7 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
     $routes->post('hardware/command', 'HardwareController::getCommand');
     $routes->post('hardware/confirm', 'HardwareController::confirmCommand');
     $routes->get('hardware/logs', 'HardwareController::getLogs');
+    $routes->post('hardware/log', 'HardwareController::log');
     
     // Protected routes
     $routes->group('', ['filter' => 'auth'], function($routes) {

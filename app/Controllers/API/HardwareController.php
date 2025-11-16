@@ -28,7 +28,7 @@ class HardwareController extends BaseController
         if (!$existingLock) {
             // Auto-register new ESP32 device
             $lockModel->insert([
-                'name' => 'Auto-registered ' . $hardwareId,
+                'name' => $this->generateFriendlyName($hardwareId),
                 'hardware_id' => $hardwareId,
                 'config_data' => json_encode([
                     'auto_lock_delay' => 300,
@@ -44,7 +44,7 @@ class HardwareController extends BaseController
                 'updated_at' => date('Y-m-d H:i:s')
             ]);
             
-            log_message('info', "Auto-registered new ESP32 device: {$hardwareId}");
+            log_message('info', "Auto-registered new ESP32 device: {$hardwareId} as '{$this->generateFriendlyName($hardwareId)}'");
             
             return $this->respond([
                 'status' => 'registered',
@@ -156,5 +156,90 @@ class HardwareController extends BaseController
             'data' => $logs,
             'count' => count($logs)
         ]);
+    }
+}
+    public function log()
+    {
+        $input = $this->request->getJSON(true);
+        $hardwareId = $input['hardware_id'] ?? '';
+        $type = $input['type'] ?? 'INFO';
+        $message = $input['message'] ?? '';
+        $level = $input['level'] ?? 'info';
+        $timestamp = $input['timestamp'] ?? time();
+        $stateChanged = $input['state_changed'] ?? false;
+        $currentState = $input['current_state'] ?? '';
+        
+        if (!$hardwareId || !$message) {
+            return $this->fail('Hardware ID and message required');
+        }
+
+        // Write to hardware activity log file
+        $logFile = WRITEPATH . 'logs/hardware_activity.log';
+        $logDir = dirname($logFile);
+        
+        // Create log directory if it doesn't exist
+        if (!is_dir($logDir)) {
+            mkdir($logDir, 0755, true);
+        }
+        
+        // Format log entry
+        $logEntry = [
+            'timestamp' => date('Y-m-d H:i:s'),
+            'hardware_id' => $hardwareId,
+            'type' => $type,
+            'level' => strtoupper($level),
+            'message' => $message,
+            'state_changed' => $stateChanged,
+            'current_state' => $currentState,
+            'device_timestamp' => $timestamp
+        ];
+        
+        $logLine = json_encode($logEntry) . "\n";
+        
+        // Append to log file
+        file_put_contents($logFile, $logLine, FILE_APPEND | LOCK_EX);
+        
+        return $this->respond(['status' => 'logged']);
+    }
+
+    private function generateFriendlyName($hardwareId)
+    {
+        // Extract meaningful parts from hardware ID
+        $patterns = [
+            'ESP32_MAIN_' => 'Main Entrance Lock',
+            'ESP32_CONF_' => 'Conference Room Lock', 
+            'ESP32_SERVER_' => 'Server Room Lock',
+            'ESP32_WH_GATE_' => 'Warehouse Gate Lock',
+            'ESP32_STORAGE_' => 'Storage Room Lock',
+            'ESP32_TEST_' => 'Test Lock',
+            'ESP32_OFFICE_' => 'Office Lock',
+            'ESP32_FRONT_' => 'Front Door Lock',
+            'ESP32_BACK_' => 'Back Door Lock',
+            'ESP32_SIDE_' => 'Side Door Lock',
+            'ESP32_GARAGE_' => 'Garage Lock',
+            'ESP32_GATE_' => 'Gate Lock',
+            'ESP32_LAB_' => 'Laboratory Lock',
+            'ESP32_ROOM_' => 'Room Lock',
+            'NODEMCU_' => 'NodeMCU Lock',
+        ];
+        
+        // Check for known patterns
+        foreach ($patterns as $pattern => $name) {
+            if (strpos($hardwareId, $pattern) === 0) {
+                // Extract number/suffix if present
+                $suffix = str_replace($pattern, '', $hardwareId);
+                if (!empty($suffix)) {
+                    return $name . ' ' . $suffix;
+                }
+                return $name;
+            }
+        }
+        
+        // Fallback: Clean up generic hardware IDs
+        $cleanName = str_replace(['ESP32_', 'NODEMCU_', '_'], [' ', ' ', ' '], $hardwareId);
+        $cleanName = ucwords(strtolower($cleanName));
+        $cleanName = preg_replace('/\s+/', ' ', trim($cleanName));
+        
+        return $cleanName . ' Lock';
     }
 }
