@@ -39,7 +39,7 @@ const unsigned long statusInterval = STATUS_INTERVAL;
 const unsigned long commandInterval = COMMAND_INTERVAL;
 
 // Function declarations
-void sendLog(String type, String message, String level, bool stateChanged = false);
+void sendLog(String type, String message, String level, bool stateChanged);
 
 void setup() {
   Serial.begin(115200);
