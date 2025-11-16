@@ -55,6 +55,7 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
         // Locks
         $routes->get('locks', 'LocksController::index');
         $routes->get('locks/(:num)', 'LocksController::show/$1');
+        $routes->put('locks/(:num)', 'LocksController::update/$1');
         $routes->post('locks/(:num)/control', 'LocksController::control/$1');
         $routes->get('locks/status', 'LocksController::batteryStatus');
         
