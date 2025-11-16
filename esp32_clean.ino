@@ -329,7 +329,7 @@ void syncWithDatabaseState() {
   HTTPClient http;
   
   // Get current lock status from database
-  http.begin(String(serverURL) + "/api/locks");
+  http.begin(String(serverURL) + "/api/locks-state");
   http.addHeader("Authorization", "Bearer demo_token");
   
   int httpCode = http.GET();
