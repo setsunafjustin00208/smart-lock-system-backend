@@ -34,6 +34,8 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
     $routes->post('hardware/command', 'HardwareController::getCommand');
     $routes->post('hardware/confirm', 'HardwareController::confirmCommand');
     $routes->get('hardware/logs', 'HardwareController::getLogs');
+    $routes->post('hardware/log', 'HardwareController::log');
+    $routes->post('hardware/sync', 'HardwareController::forceSync');
     
     // Protected routes
     $routes->group('', ['filter' => 'auth'], function($routes) {
@@ -53,6 +55,7 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
         // Locks
         $routes->get('locks', 'LocksController::index');
         $routes->get('locks/(:num)', 'LocksController::show/$1');
+        $routes->put('locks/(:num)', 'LocksController::update/$1');
         $routes->post('locks/(:num)/control', 'LocksController::control/$1');
         $routes->get('locks/status', 'LocksController::batteryStatus');
         
