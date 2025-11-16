@@ -126,6 +126,9 @@ class AuthController extends BaseController
         if (isset($input['email'])) {
             $updateData['email'] = $input['email'];
         }
+        if (isset($input['username'])) {
+            $updateData['username'] = $input['username'];
+        }
 
         if (!empty($updateData)) {
             $userModel->update($user['user_id'], $updateData);
