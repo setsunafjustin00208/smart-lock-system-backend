@@ -17,7 +17,7 @@ class NotificationModel extends Model
 
     public function createNotification($userId, $type, $title, $message, $lockId = null, $lockName = null)
     {
-        return $this->insert([
+        $notificationId = $this->insert([
             'user_id' => $userId,
             'type' => $type,
             'title' => $title,
@@ -26,6 +26,54 @@ class NotificationModel extends Model
             'lock_name' => $lockName,
             'is_read' => false
         ]);
+
+        // Send email notification
+        if ($notificationId && $userId) {
+            $this->sendEmailNotification($userId, $type, $title, $message, $lockName);
+        }
+
+        return $notificationId;
+    }
+
+    private function sendEmailNotification($userId, $type, $title, $message, $lockName = null)
+    {
+        try {
+            // Get user email
+            $userModel = new \App\Models\UserModel();
+            $user = $userModel->find($userId);
+            
+            if (!$user || !$user['email']) {
+                return false;
+            }
+
+            $emailService = new \App\Libraries\EmailService();
+            
+            // Send appropriate email based on notification type
+            switch ($type) {
+                case 'lock_status':
+                    // Determine action from message
+                    $action = (strpos(strtolower($message), 'unlock') !== false) ? 'unlocked' : 'locked';
+                    $emailService->sendLockAlert($user['email'], $lockName ?: 'Lock', $action, $user['username']);
+                    break;
+                    
+                case 'status_alert':
+                    // Determine status from message
+                    $status = (strpos(strtolower($message), 'offline') !== false) ? 'offline' : 'online';
+                    $emailService->sendStatusAlert($user['email'], $lockName ?: 'Device', $status);
+                    break;
+                    
+                case 'system_alert':
+                case 'user_action':
+                default:
+                    $emailService->sendSecurityAlert($user['email'], $message, $lockName);
+                    break;
+            }
+            
+            log_message('info', "Email notification sent to {$user['email']} for notification type: {$type}");
+            
+        } catch (\Exception $e) {
+            log_message('error', "Failed to send email notification: " . $e->getMessage());
+        }
     }
 
     public function getUnreadCount($userId)

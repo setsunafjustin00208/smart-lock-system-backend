@@ -14,6 +14,7 @@
         "cboden/ratchet": "^0.4.4",
         "codeigniter4/framework": "^4.0",
         "firebase/php-jwt": "^6.11",
+        "getbrevo/brevo-php": "^2.0",
         "predis/predis": "^3.2",
         "ratchet/pawl": "^0.4.3"
     },

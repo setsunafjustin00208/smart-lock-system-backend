@@ -65,5 +65,12 @@ $routes->group('api', ['namespace' => 'App\Controllers\API'], function($routes) 
         $routes->put('notifications/(:num)/read', 'NotificationsController::markAsRead/$1');
         $routes->put('notifications/read-all', 'NotificationsController::markAllAsRead');
         $routes->delete('notifications/(:num)', 'NotificationsController::delete/$1');
+        
+        // Test endpoints (development only)
+        $routes->get('test/email', 'TestController::sendTestEmail');
+        $routes->get('test/status-alert', 'TestController::sendStatusAlert');
+        $routes->get('test/security-alert', 'TestController::sendSecurityAlert');
+        $routes->get('test/account-email', 'TestController::sendAccountCreationEmail');
+        $routes->get('test/notification-email', 'TestController::testNotificationEmail');
     });
 });

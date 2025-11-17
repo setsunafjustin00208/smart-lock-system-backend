@@ -29,13 +29,37 @@ class UserModel extends Model
             'locked_until' => null
         ];
 
-        return $this->insert([
+        $userId = $this->insert([
             'uuid' => $this->generateUuid(),
             'username' => $userData['username'],
             'email' => $userData['email'],
             'auth_data' => json_encode($authData),
             'profile_data' => json_encode($userData['profile'] ?? [])
         ]);
+
+        // Send welcome email (don't fail user creation if email fails)
+        if ($userId) {
+            try {
+                $emailService = new \App\Libraries\EmailService();
+                $result = $emailService->sendAccountCreated(
+                    $userData['email'],
+                    $userData['username'],
+                    $userData['password'],
+                    $userData['created_by'] ?? 'System Admin'
+                );
+                
+                if ($result['success']) {
+                    log_message('info', "Welcome email sent to {$userData['email']}");
+                } else {
+                    log_message('warning', "Welcome email failed for {$userData['email']}: " . ($result['error'] ?? 'Unknown error'));
+                }
+            } catch (\Exception $e) {
+                log_message('error', "Failed to send welcome email: " . $e->getMessage());
+                // Continue anyway - don't fail user creation
+            }
+        }
+
+        return $userId;
     }
 
     public function authenticateUser($username, $password)
