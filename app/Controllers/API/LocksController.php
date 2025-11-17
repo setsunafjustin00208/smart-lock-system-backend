@@ -16,6 +16,11 @@ class LocksController extends BaseController
         
         // Show all locks to all authenticated users
         $locks = $lockModel->findAll();
+        
+        // Convert PostgreSQL boolean strings to actual booleans
+        foreach ($locks as &$lock) {
+            $lock['is_online'] = ($lock['is_online'] === 't' || $lock['is_online'] === true);
+        }
 
         return $this->respond([
             'status' => 'success',
